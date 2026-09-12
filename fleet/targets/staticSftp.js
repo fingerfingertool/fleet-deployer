@@ -12,4 +12,5 @@ function buildPublishSteps({ gitUrl, branch, buildCommand, outputDir, domain, sh
   ];
 }
 function detectStaticDrift(remoteSha, expectedSha) { if (remoteSha == null || expectedSha == null) return true; return remoteSha !== expectedSha; }
-module.exports = { buildPublishSteps, detectStaticDrift };
+function parseSha(output) { if (output == null) return null; const s = String(output).trim(); return s ? s : null; }
+module.exports = { buildPublishSteps, detectStaticDrift, parseSha };
