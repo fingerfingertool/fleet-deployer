@@ -131,10 +131,15 @@ input::placeholder{color:var(--faint)}
       <div id="targetTable"></div>
       <div class="row">
         <input id="hName" placeholder="name, e.g. vds-hetzner-1">
+        <select id="hKind" aria-label="Target kind"><option value="vds">vds</option><option value="static-sftp">static-sftp</option></select>
         <input id="hIp" placeholder="IP address" size="16">
         <input id="hUser" placeholder="ssh user" value="root" size="10">
         <input id="hKey" placeholder="ssh key path (optional)" size="24">
+        <input id="sHost" placeholder="sftp host" size="20" hidden>
+        <input id="sUser" placeholder="sftp username" size="14" hidden>
+        <input id="sDir" placeholder="remote dir, e.g. /public_html" size="24" hidden>
         <button class="btn" id="hAdd">Add host</button>
+        <button class="btn" id="tAdd">Add target</button>
       </div>
     </section>
     <section id="tab-propagate" hidden>
@@ -247,6 +252,10 @@ $('#pAdd').onclick=async()=>{const r=await api.post('/api/fleet/products',{name:
   r.ok?(toast('Product added.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
 $('#hAdd').onclick=async()=>{const r=await api.post('/api/fleet/hosts',{name:$('#hName').value.trim(),ip:$('#hIp').value.trim(),sshUser:$('#hUser').value.trim()||'root',sshKeyPath:$('#hKey').value.trim()||undefined});
   r.ok?(toast('Host added. Point the domain at its IP.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
+$('#hKind').onchange=e=>{const sftp=e.target.value==='static-sftp';$('#hIp').hidden=sftp;$('#hUser').hidden=sftp;$('#hKey').hidden=sftp;$('#sHost').hidden=!sftp;$('#sUser').hidden=!sftp;$('#sDir').hidden=!sftp;};
+$('#tAdd').onclick=async()=>{const kind=$('#hKind').value;const name=$('#hName').value.trim();
+  const body=kind==='static-sftp'?{kind,name,host:$('#sHost').value.trim(),username:$('#sUser').value.trim(),remoteDir:$('#sDir').value.trim()}:{kind,name,ip:$('#hIp').value.trim(),sshUser:$('#hUser').value.trim()||'root',sshKeyPath:$('#hKey').value.trim()||undefined};
+  const r=await api.post('/api/fleet/targets',body);r.ok?(toast('Target added.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
 $('#fShip').onclick=async()=>{const tp=$('#targetPicker');const r=await api.post('/api/fleet/deployments',{productId:$('#fProduct').value,branch:$('#fBranch').value.trim()||'main',targetId:tp?tp.value:undefined,domain:$('#fDomain').value.trim(),envValues:{}});
   r.ok?(toast('Clone charted. Open it for the go-live checklist.'),refresh()):toast('Could not chart: '+(r.body.error||'unknown'));};
 $('#gPlan').onclick=()=>{const head=$('#gHead').value.trim();if(!head){toast('Enter the origin HEAD commit first.');return}

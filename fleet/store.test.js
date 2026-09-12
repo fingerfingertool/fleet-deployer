@@ -15,6 +15,11 @@ test('migrates hosts to vds targets and defaults buildConfig', () => {
   const p = s.saveProduct({ name: 'shop', gitUrl: 'https://x/y.git' });
   expect(p.buildConfig).toEqual({ command: 'npm run build', outputDir: 'dist/' });
 });
+test('saveTarget throws on 513-char key path', () => {
+  const s = createStore(':memory:');
+  expect(() => s.saveTarget({ name: 'x', kind: 'vds', ip: '1.2.3.4', sshUser: 'root', sshKeyPath: 'k'.repeat(513) })).toThrow('key path too long');
+  expect(() => s.saveTarget({ name: 'x', kind: 'vds', ip: '1.2.3.4', sshUser: 'root', keyPath: 'k'.repeat(513) })).toThrow('key path too long');
+});
 test('saves static-sftp target', () => {
   const s = createStore(':memory:');
   const t = s.saveTarget({ name: 'cpanel1', kind: 'static-sftp', host: 'cp.example.com', username: 'u', remoteDir: '/public_html' });

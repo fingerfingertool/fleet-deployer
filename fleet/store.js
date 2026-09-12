@@ -17,8 +17,9 @@ const KEY_MATERIAL_FIELDS = ['privateKey', 'sshKey', 'password', 'keyMaterial'];
 function stripKeyMaterial(t) {
   const out = { ...t };
   for (const f of KEY_MATERIAL_FIELDS) delete out[f];
-  if (typeof out.sshKeyPath === 'string') out.sshKeyPath = out.sshKeyPath.slice(0, 512);
-  if (typeof out.keyPath === 'string') out.keyPath = out.keyPath.slice(0, 512);
+  for (const f of ['sshKeyPath', 'keyPath']) {
+    if (typeof out[f] === 'string' && out[f].length > 512) throw new Error('key path too long');
+  }
   return out;
 }
 function withBuildDefaults(p) {

@@ -11,3 +11,11 @@ test('publish steps clone branch, build, upload dist, write sha, healthcheck', (
 test('drift when sha differs', () => { expect(detectStaticDrift('aaa', 'bbb')).toBe(true); expect(detectStaticDrift('aaa', 'aaa')).toBe(false); });
 test('parseSha trims whitespace and returns null on empty', () => { expect(parseSha('  abc123\n')).toBe('abc123'); expect(parseSha('   ')).toBeNull(); expect(parseSha('')).toBeNull(); });
 test('adapterFor dispatches kinds', () => { expect(adapterFor('static-sftp')).toBeTruthy(); expect(adapterFor('vds')).toBeTruthy(); });
+test('adapterFor throws on unknown kind', () => { expect(() => adapterFor('nope')).toThrow('Unknown target kind'); });
+test('publish steps thread host/remoteDir and quote domain', () => {
+  const steps = buildPublishSteps({ gitUrl: 'https://x/y.git', branch: 'main', domain: 'shop.example.com', sha: 'abc', host: 'sftp.example.com', remoteDir: '/public_html' });
+  const all = steps.join('\n');
+  expect(all).toMatch('sftp.example.com');
+  expect(all).toMatch('/public_html');
+  expect(all).toMatch("'https://shop.example.com/'");
+});

@@ -3,7 +3,8 @@ const staticSftp = require('./staticSftp');
 
 function adapterFor(kind) {
   if (kind === 'static-sftp') return staticSftp;
-  return vds;
+  if (kind === 'vds') return vds;
+  throw new Error('Unknown target kind: ' + kind);
 }
 
 module.exports = { adapterFor };
