@@ -6,4 +6,5 @@ deployment:
     - /bin/cp server.js package.json package-lock.json $DEPLOYPATH
     - /bin/mkdir -p $DEPLOYPATH/data
     - cd $DEPLOYPATH && /usr/local/bin/npm install --omit=dev
-    - /bin/touch $DEPLOYPATH/tmp/restart.txt
+    # Node.js apps restart from cPanel > Setup Node.js App > Restart
+    # (tmp/restart.txt only applies to Python/Ruby Passenger apps)
