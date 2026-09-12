@@ -1,21 +1,230 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="utf-8"><title>Fleet Deployer</title></head>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet Harbor — deployment control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0b1120; --panel:#131c30; --panel2:#0f1728; --line:#243252;
+  --paper:#e9eef6; --dim:#8ea1bd; --faint:#5b6c88;
+  --buoy:#ff6b35; --buoy-dk:#c24e22;
+  --live:#2fd47e; --warn:#f5a623; --bad:#f2555a; --draft:#8ea1bd;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --disp:"Space Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ink);color:var(--paper);font-family:var(--disp);font-size:15px;line-height:1.5}
+a{color:inherit}
+/* harbor bar */
+.harbor{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid var(--line);
+  background:radial-gradient(1200px 200px at 20% -60px,#1b2a4a 0%,var(--ink) 60%)}
+.harbor .mark{width:34px;height:34px;border-radius:9px;background:var(--buoy);display:grid;place-items:center;font-weight:700;color:#13100c;font-size:18px}
+.harbor h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.2px}
+.harbor h1 span{color:var(--dim);font-weight:400}
+.tally{margin-left:auto;display:flex;gap:18px;align-items:center}
+.tally .t{text-align:right}
+.tally .n{font-family:var(--mono);font-size:20px;font-weight:500}
+.tally .l{font-size:12px;color:var(--dim)}
+.beacon{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:7px;vertical-align:1px}
+.b-live{background:var(--live);box-shadow:0 0 8px var(--live)}
+.b-draft{background:var(--draft)}
+.b-failed,.b-drifted{background:var(--bad);box-shadow:0 0 8px var(--bad)}
+.b-running,.b-queued{background:var(--warn);animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.b-running,.b-queued{animation:none}}
+/* shell */
+.shell{display:flex;min-height:calc(100vh - 63px)}
+.rail{width:196px;border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:2px;background:var(--panel2)}
+.rail button{background:none;border:0;color:var(--dim);font:inherit;text-align:left;padding:9px 12px;border-radius:8px;cursor:pointer}
+.rail button[aria-current="true"]{background:var(--panel);color:var(--paper)}
+.rail button:hover{color:var(--paper)}
+.rail button:focus-visible,.harbor :focus-visible,main :focus-visible{outline:2px solid var(--buoy);outline-offset:2px}
+.rail .hint{margin-top:auto;font-size:12px;color:var(--faint);padding:0 12px}
+main{flex:1;padding:22px 26px;max-width:1060px}
+h2{font-size:24px;margin:0 0 4px}
+.sub{color:var(--dim);margin:0 0 18px;max-width:70ch}
+/* tables */
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line)}
+th{font-size:12.5px;color:var(--dim);font-weight:500}
+tr:last-child td{border-bottom:0}
+.mono{font-family:var(--mono);font-size:13px}
+.dim{color:var(--dim)}
+.empty{padding:34px;text-align:center;color:var(--dim)}
+.empty p{margin:0 0 12px}
+/* forms + buttons */
+.row{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
+input,select{background:var(--panel2);border:1px solid var(--line);color:var(--paper);border-radius:8px;padding:9px 11px;font:inherit;font-size:14px}
+input::placeholder{color:var(--faint)}
+.btn{background:var(--buoy);border:0;color:#171006;font-weight:700;border-radius:8px;padding:9px 16px;font:inherit;font-size:14px;cursor:pointer}
+.btn:hover{background:#ff7d4d}
+.btn.ghost{background:transparent;color:var(--paper);border:1px solid var(--line);font-weight:400}
+.btn.ghost:hover{border-color:var(--buoy);color:var(--buoy)}
+.btn.small{padding:5px 11px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:default}
+/* drawer */
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(430px,94vw);background:var(--panel);border-left:1px solid var(--line);
+  padding:22px;transform:translateX(105%);transition:transform .22s ease;overflow:auto;z-index:20}
+.drawer.open{transform:none}
+.drawer h3{margin:0 0 2px;font-size:20px}
+.check{list-style:none;margin:14px 0;padding:0;display:grid;gap:8px}
+.check li{border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:14px}
+.check li b{display:block;font-size:13px;color:var(--dim);font-weight:500}
+.scrim{position:fixed;inset:0;background:rgba(4,8,16,.6);opacity:0;pointer-events:none;transition:opacity .22s}
+.scrim.open{opacity:1;pointer-events:auto}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);
+  border-left:4px solid var(--buoy);border-radius:10px;padding:11px 18px;display:none;z-index:30;max-width:90vw}
+@media (max-width:760px){.shell{flex-direction:column}.rail{width:auto;flex-direction:row;overflow:auto}.rail .hint{display:none}}
+</style>
+</head>
 <body>
-<h1>Fleet Deployments</h1>
-<table border="1"><thead><tr><th>Branch</th><th>Domain</th><th>Status</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table>
+<header class="harbor">
+  <div class="mark">◈</div>
+  <h1>Fleet Harbor <span>— every clone, one chart table</span></h1>
+  <div class="tally">
+    <div class="t"><div class="n" id="tLive">–</div><div class="l">live</div></div>
+    <div class="t"><div class="n" id="tShips">–</div><div class="l">deployments</div></div>
+    <div class="t"><div class="n" id="tHosts">–</div><div class="l">hosts</div></div>
+  </div>
+</header>
+<div class="shell">
+  <nav class="rail" aria-label="Sections">
+    <button data-tab="fleet" aria-current="true">Deployments</button>
+    <button data-tab="products" aria-current="false">Products</button>
+    <button data-tab="hosts" aria-current="false">VDS hosts</button>
+    <button data-tab="propagate" aria-current="false">Hotfix propagate</button>
+    <div class="hint">Any branch is a reskin. Pick a product, a branch, a host, a domain — ship it.</div>
+  </nav>
+  <main>
+    <section id="tab-fleet">
+      <h2>Deployments</h2>
+      <p class="sub">Each row is one live clone: a branch of a product, on a host, behind a domain. Open a row to see the go-live checklist.</p>
+      <div id="depTable"></div>
+      <h2 style="margin-top:26px;font-size:18px">Ship a new clone</h2>
+      <div class="row">
+        <select id="fProduct" aria-label="Product"></select>
+        <input id="fBranch" placeholder="branch (any branch = reskin)" value="main" size="26">
+        <select id="fHost" aria-label="VDS host"></select>
+        <input id="fDomain" placeholder="domain, e.g. shop2.example.com" size="28">
+        <button class="btn" id="fShip">Ship it</button>
+      </div>
+    </section>
+    <section id="tab-products" hidden>
+      <h2>Products</h2>
+      <p class="sub">A product is a git repo with a Dockerfile or compose file. Branches become reskins at deploy time — nothing to configure per variant.</p>
+      <div id="prodTable"></div>
+      <div class="row">
+        <input id="pName" placeholder="name, e.g. ecom-shop">
+        <input id="pGit" placeholder="git url" size="34">
+        <input id="pBranch" placeholder="default branch" value="main" size="14">
+        <button class="btn" id="pAdd">Add product</button>
+      </div>
+    </section>
+    <section id="tab-hosts" hidden>
+      <h2>VDS hosts</h2>
+      <p class="sub">Any provider. Add the box, point the domain's A-record at its IP yourself, then ship. Only a key <em>path</em> is stored — never key material.</p>
+      <div id="hostTable"></div>
+      <div class="row">
+        <input id="hName" placeholder="name, e.g. vds-hetzner-1">
+        <input id="hIp" placeholder="IP address" size="16">
+        <input id="hUser" placeholder="ssh user" value="root" size="10">
+        <input id="hKey" placeholder="ssh key path (optional)" size="24">
+        <button class="btn" id="hAdd">Add host</button>
+      </div>
+    </section>
+    <section id="tab-propagate" hidden>
+      <h2>Hotfix propagate</h2>
+      <p class="sub">Fix the origin branch, enter its new commit, and see which clones sit behind it. Merge happens in git — this table tells you where to look.</p>
+      <div class="row">
+        <input id="gHead" placeholder="origin HEAD commit, e.g. 9f3c…" size="30">
+        <button class="btn ghost" id="gPlan">Compare</button>
+      </div>
+      <div id="propTable"><div class="empty"><p>Enter a commit to compare the fleet against it.</p></div></div>
+    </section>
+  </main>
+</div>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Deployment detail"></aside>
+<div class="toast" id="toast" role="status"></div>
 <script>
-fetch('/api/fleet/deployments').then(r => r.json()).then(deps => {
-  const tb = document.getElementById('rows');
-  deps.forEach(d => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td></td><td></td><td></td><td><button>Deploy</button> <button>Redeploy</button></td>';
-    tr.children[0].textContent = d.branch || '';
-    tr.children[1].textContent = d.domain || '';
-    tr.children[2].textContent = d.status || '';
-    tb.appendChild(tr);
-  });
+const $=s=>document.querySelector(s), api={
+  get:p=>fetch(p).then(r=>r.json()),
+  post:(p,b)=>fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(async r=>({ok:r.ok,body:await r.json()}))
+};
+let DB={products:[],hosts:[],deps:[]};
+const beacon=s=>({live:'b-live',draft:'b-draft',failed:'b-failed',drifted:'b-drifted',running:'b-running',queued:'b-queued'}[s]||'b-draft');
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',3200)}
+async function refresh(){
+  [DB.products,DB.hosts,DB.deps]=await Promise.all([api.get('/api/fleet/products'),api.get('/api/fleet/hosts'),api.get('/api/fleet/deployments')]);
+  $('#tLive').textContent=DB.deps.filter(d=>d.status==='live').length;
+  $('#tShips').textContent=DB.deps.length; $('#tHosts').textContent=DB.hosts.length;
+  renderFleet();renderProducts();renderHosts();
+  $('#fProduct').innerHTML=DB.products.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')||'<option value="">— add a product first —</option>';
+  $('#fHost').innerHTML=DB.hosts.map(h=>`<option value="${h.id}">${h.name} · ${h.ip}</option>`).join('')||'<option value="">— add a host first —</option>';
+}
+function renderFleet(){
+  const el=$('#depTable');
+  if(!DB.deps.length){el.innerHTML=`<div class="empty"><p>No clones yet. Fill the form below — product, branch, host, domain — and ship your first one.</p></div>`;return}
+  el.innerHTML=`<table><thead><tr><th>Status</th><th>Clone</th><th>Route</th><th>Commit</th><th></th></tr></thead><tbody>`+
+    DB.deps.map(d=>{const p=DB.products.find(x=>x.id===d.productId),h=DB.hosts.find(x=>x.id===d.vdsId);
+      return `<tr><td><span class="beacon ${beacon(d.status)}"></span><span class="mono">${d.status||'draft'}</span></td>
+      <td><b>${p?p.name:'?'}</b> <span class="mono dim">${d.branch||''}</span></td>
+      <td class="mono">${d.domain||''}<br><span class="dim">${h?h.name+' · '+h.ip:''}</span></td>
+      <td class="mono dim">${d.currentCommit?d.currentCommit.slice(0,8):'— not shipped —'}</td>
+      <td><button class="btn ghost small" data-open="${d.id}">Open</button></td></tr>`}).join('')+`</tbody></table>`;
+  el.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.open));
+}
+function renderProducts(){
+  $('#prodTable').innerHTML=DB.products.length?`<table><thead><tr><th>Product</th><th>Repo</th><th>Default branch</th></tr></thead><tbody>`+
+    DB.products.map(p=>`<tr><td><b>${p.name}</b></td><td class="mono dim">${p.gitUrl}</td><td class="mono">${p.defaultBranch||'main'}</td></tr>`).join('')+`</tbody></table>`
+    :`<div class="empty"><p>No products yet. A product is just a repo — add yours below.</p></div>`;
+}
+function renderHosts(){
+  $('#hostTable').innerHTML=DB.hosts.length?`<table><thead><tr><th>Host</th><th>IP</th><th>SSH</th></tr></thead><tbody>`+
+    DB.hosts.map(h=>`<tr><td><b>${h.name}</b></td><td class="mono">${h.ip}</td><td class="mono dim">${h.sshUser}${h.sshKeyPath?' · key path set':''}</td></tr>`).join('')+`</tbody></table>`
+    :`<div class="empty"><p>No hosts yet. Any VDS works — add its IP below.</p></div>`;
+}
+function openDrawer(id){
+  const d=DB.deps.find(x=>x.id===id);if(!d)return;
+  const p=DB.products.find(x=>x.id===d.productId),h=DB.hosts.find(x=>x.id===d.vdsId);
+  $('#drawer').innerHTML=`<h3>${d.domain||'Untitled clone'}</h3>
+    <p class="dim mono">${p?p.name:''} · ${d.branch||''} → ${h?h.name+' ('+h.ip+')':''}</p>
+    <p><span class="beacon ${beacon(d.status)}"></span><span class="mono">${d.status||'draft'}</span>
+    <span class="dim mono"> · ${d.currentCommit?d.currentCommit.slice(0,12):'no commit yet'}</span></p>
+    <ol class="check">
+      <li><b>1 · DNS</b>Point A-record <span class="mono">${d.domain||''}</span> → <span class="mono">${h?h.ip:''}</span> at your registrar.</li>
+      <li><b>2 · Ship</b>Panel clones <span class="mono">${d.branch||''}</span>, builds the image, starts the container.</li>
+      <li><b>3 · Secure</b>Caddy writes the vhost and fetches the certificate automatically.</li>
+      <li><b>4 · Verify</b>Health check must answer before the beacon turns green.</li>
+    </ol>
+    <div class="row"><button class="btn" disabled title="Wires to the deploy queue in the next wave">Deploy</button>
+    <button class="btn ghost" id="dClose">Close</button></div>
+    <p class="dim" style="font-size:13px">Deploy execution, redeploy and rollback arrive with the SSH worker. This board already tracks what should live where.</p>`;
+  $('#drawer').classList.add('open');$('#scrim').classList.add('open');
+  $('#dClose').onclick=closeDrawer;
+}
+function closeDrawer(){$('#drawer').classList.remove('open');$('#scrim').classList.remove('open')}
+$('#scrim').onclick=closeDrawer;
+document.querySelectorAll('.rail button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.rail button').forEach(x=>x.setAttribute('aria-current','false'));
+  b.setAttribute('aria-current','true');
+  ['fleet','products','hosts','propagate'].forEach(t=>$('#tab-'+t).hidden=t!==b.dataset.tab);
 });
+$('#pAdd').onclick=async()=>{const r=await api.post('/api/fleet/products',{name:$('#pName').value.trim(),gitUrl:$('#pGit').value.trim(),defaultBranch:$('#pBranch').value.trim()||'main'});
+  r.ok?(toast('Product added.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
+$('#hAdd').onclick=async()=>{const r=await api.post('/api/fleet/hosts',{name:$('#hName').value.trim(),ip:$('#hIp').value.trim(),sshUser:$('#hUser').value.trim()||'root',sshKeyPath:$('#hKey').value.trim()||undefined});
+  r.ok?(toast('Host added. Point the domain at its IP.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
+$('#fShip').onclick=async()=>{const r=await api.post('/api/fleet/deployments',{productId:$('#fProduct').value,branch:$('#fBranch').value.trim()||'main',vdsId:$('#fHost').value,domain:$('#fDomain').value.trim(),envValues:{}});
+  r.ok?(toast('Clone charted. Open it for the go-live checklist.'),refresh()):toast('Could not chart: '+(r.body.error||'unknown'));};
+$('#gPlan').onclick=()=>{const head=$('#gHead').value.trim();if(!head){toast('Enter the origin HEAD commit first.');return}
+  const rows=DB.deps.map(d=>({d,behind:d.currentCommit!==head}));
+  $('#propTable').innerHTML=`<table><thead><tr><th>Clone</th><th>Verdict</th></tr></thead><tbody>`+
+    rows.map(({d,behind})=>`<tr><td class="mono">${d.domain||d.id} <span class="dim">${d.currentCommit?d.currentCommit.slice(0,8):'—'}</span></td>
+    <td>${behind?'<span class="beacon b-queued"></span>behind — merge origin into '+d.branch+' in git, then redeploy':'<span class="beacon b-live"></span>on HEAD'}</td></tr>`).join('')+`</tbody></table>`;};
+refresh();
 </script>
 </body>
 </html>

@@ -43,6 +43,8 @@ function buildApp(file) {
     res.status(201).json(store.saveDeployment(deployment));
   });
   app.get('/api/fleet/deployments', (req, res) => res.json(store.listDeployments()));
+  app.get('/api/fleet/products', (req, res) => res.json(store.listProducts()));
+  app.get('/api/fleet/hosts', (req, res) => res.json(store.listHosts()));
   return app;
 }
 module.exports = { buildApp };
