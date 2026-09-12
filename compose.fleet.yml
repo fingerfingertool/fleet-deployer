@@ -1,0 +1,18 @@
+services:
+  fleet:
+    build:
+      context: .
+      dockerfile: fleet.Dockerfile
+    image: fleet-panel:latest
+    container_name: fleet-panel
+    ports:
+      - "${FLEET_PORT:-3100}:3100"
+    environment:
+      FLEET_PORT: 3100
+      FLEET_DB: /app/data/fleet.json
+    volumes:
+      - fleet-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  fleet-data:
