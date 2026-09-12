@@ -1,0 +1,9 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/$CPANEL_USER/ghostname/
+    - /bin/cp -R public $DEPLOYPATH
+    - /bin/cp server.js package.json package-lock.json $DEPLOYPATH
+    - /bin/mkdir -p $DEPLOYPATH/data
+    - cd $DEPLOYPATH && /usr/local/bin/npm install --omit=dev
+    - /bin/touch $DEPLOYPATH/tmp/restart.txt
