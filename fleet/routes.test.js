@@ -38,3 +38,19 @@ test('status spoof ignored', async () => {
   expect(d.body.status).toBe('draft');
   expect(d.body.currentCommit).toBeNull();
 });
+test('creates static-sftp target and deployment via targetId', async () => {
+  const app = buildApp(':memory:');
+  const p = (await request(app).post('/api/fleet/products').send({ name: 's', gitUrl: 'https://x/y.git', buildConfig: { command: 'npm run build', outputDir: 'dist' } })).body;
+  expect(p.buildConfig.outputDir).toBe('dist');
+  const t = (await request(app).post('/api/fleet/targets').send({ name: 'cp1', kind: 'static-sftp', host: 'cp.example.com', username: 'u', remoteDir: '/public_html' })).body;
+  expect(t.id).toBeTruthy();
+  const d = await request(app).post('/api/fleet/deployments').send({ productId: p.id, branch: 'main', targetId: t.id, domain: 'shop.example.com' });
+  expect(d.status).toBe(201);
+  expect(d.body.targetId).toBe(t.id);
+});
+test('rejects key material on targets', async () => {
+  const app = buildApp(':memory:');
+  const r = await request(app).post('/api/fleet/targets').send({ name: 'x', kind: 'vds', ip: '1.2.3.4', sshUser: 'root', privateKey: 'SECRET' });
+  expect(r.status).toBe(201);
+  expect(r.body.privateKey).toBeUndefined();
+});
