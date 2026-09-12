@@ -20,7 +20,7 @@
 <div class="prompt">
 <span class="ps1 mono">ghost@registry:~$ claim</span>
 <div class="suggest"><input id="q" placeholder="a name or a seed — exact matches and twists come back together" autocomplete="off"><div class="sdrop" id="sdrop"></div></div>
-<select id="years" aria-label="term"><option value="1">1 year, half price</option><option value="2">2 years</option><option value="5">5 years</option></select>
+<select id="years" aria-label="term"><option value="1">1 year</option><option value="2">2 years</option><option value="5">5 years</option></select>
 <button class="btn ember" onclick="go()">Check availability</button>
 </div>
 <div id="results"><p class="note">Nothing checked yet. Type a name above — taken names are filtered out, never listed.</p></div>
@@ -49,7 +49,7 @@
 <script src="/app.js"></script>
 <script>
 document.getElementById('years').value = store.years;
-document.getElementById('years').onchange = e => { store.years = e.target.value; };
+document.getElementById('years').onchange = e => { store.years = e.target.value; renderTlds(); };
 const AFF={pre:['get','try','go','my','use','hey','lets','join'],suf:['ly','hub','labs','base','hq','os','fi','ery','ify','stack','wise','forge']};
 function stems(s){s=s.toLowerCase().replace(/[^a-z0-9]/g,'');if(s.length<2)return[];const o=[];
 AFF.pre.slice(0,6).forEach(p=>o.push({t:p+s,a:'prefix '+p}));AFF.suf.slice(0,6).forEach(x=>o.push({t:s+x,a:'suffix '+x}));return o.slice(0,10);}
@@ -77,9 +77,14 @@ box.innerHTML=
 +(twists.length?`<p class="note" style="margin-top:14px">Twists on “${mo.seed}” — ${twists.length} free.</p>`+twists.map(x=>line(x)).join(''):'');
 if(!efree.length&&!twists.length)box.innerHTML='<p class="note">Nothing free under that spelling. Try a rarer word.</p>';}
 catch(e){toast('Registries silent', e.message);box.innerHTML='<p class="note">The registries did not answer. Check the connection and try again.</p>';}}
-async function loadTlds(){try{const t=await api('/api/tlds');const s=await api('/api/pricing-source');
+let tldData=[];
+function totalFor(x,y){return (x.firstYear+x.baseYearly*(y-1)).toFixed(2);}
+function renderTlds(){const y=Number(store.years)||1;
+document.querySelector('#pricing thead tr').innerHTML=`<th>Ending</th><th style="text-align:right">First year</th><th style="text-align:right">${y>1?y+' years':"Renewal /yr"}</th>`;
+document.getElementById('tlds').innerHTML=tldData.map(x=>`<tr><td class="mono">${x.tld}</td><td class="num"><s>$${x.baseYearly}</s> <b>$${x.firstYear}</b></td><td class="num mono">$${y>1?totalFor(x,y):x.baseYearly}</td></tr>`).join('');}
+async function loadTlds(){try{tldData=await api('/api/tlds');const s=await api('/api/pricing-source');
 document.getElementById('src').textContent='Live wholesale feed · '+s.source+'. First year already halved in the table.';
-document.getElementById('tlds').innerHTML=t.map(x=>`<tr><td class="mono">${x.tld}</td><td class="num"><s>$${x.baseYearly}</s> <b>$${x.firstYear}</b></td><td class="num mono">$${x.baseYearly}</td></tr>`).join('');}
+renderTlds();}
 catch(e){toast('Pricing offline', e.message);}}
 loadTlds();
 </script></body></html>

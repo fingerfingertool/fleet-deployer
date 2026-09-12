@@ -20,18 +20,16 @@
 <div class="frow">
 <input id="nick" placeholder="nickname" autocomplete="username">
 <input id="pass" type="password" placeholder="password, 6+ characters" autocomplete="current-password">
-<button class="btn ember" onclick="signup()">Create nickname account</button>
+<button class="btn ember" onclick="signup()">Create account</button>
 <button class="btn line" style="color:#141310;border-color:#141310" onclick="login()">Log in</button>
 </div></div>
 <div id="panel" style="display:none">
 <div class="panel"><div class="kv"><span>Nickname</span><b class="mono" id="dNick">—</b></div>
 <div class="kv"><span>Balance</span><b class="mono" id="dBal">—</b></div>
 <div class="kv"><span>Names held</span><b class="mono" id="dCount">—</b></div></div>
-<div class="panel"><h3 style="margin:0 0 4px">Top up with crypto</h3>
-<p class="note">Demo till BTCPay is wired: credits the account straight away.</p>
+<div class="panel"><h3 style="margin:0 0 4px">Balance</h3>
+<p class="note">Top up with crypto at checkout. Balance settles instantly when it covers the total.</p>
 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
-<input id="amt" type="number" min="1" value="25" style="font:inherit;background:#0a0d0c;border:1px solid #2b332e;color:var(--paper);border-radius:9px;padding:11px 14px;width:130px">
-<button class="btn ember sm" onclick="topup()">Credit demo funds</button>
 <button class="btn quiet sm" onclick="logout()">Log out</button></div></div>
 <div class="panel"><h3 style="margin:0 0 6px">Registered names</h3><div id="doms"><p class="note">Nothing registered under this nickname yet.</p></div></div>
 </div></div></main>
@@ -41,7 +39,7 @@
 <script>
 async function signup(){const nick=document.getElementById('nick').value.trim(),pass=document.getElementById('pass').value;
 try{const j=await api('/api/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nick,pass})});
-toast('Nickname "'+j.nick+'" minted', j.warning, 'ok');}
+localStorage.setItem('tok',j.token);toast('Nickname "'+j.nick+'" minted','You are logged in. '+j.warning,'ok');showPanel();refreshHeader();}
 catch(e){toast('Could not mint nickname', e.message, 'err');}}
 async function login(){const nick=document.getElementById('nick').value.trim(),pass=document.getElementById('pass').value;
 if(!nick||!pass){toast('Missing fields','Type the nickname and password first.','err');return;}

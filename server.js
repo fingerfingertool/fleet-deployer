@@ -25,9 +25,10 @@ app.post('/api/signup', (req, res) => {
   const users = loadUsers();
   if (users.some(u => u.nick.toLowerCase() === nick.toLowerCase()))
     return res.status(409).json({ error: 'nickname taken' });
-  users.push({ nick, hash: hashPass(nick, pass), created: new Date().toISOString(), domains: [], balance: 0 });
+  users.push({ nick, hash: hashPass(nick, pass), created: new Date().toISOString(), domains: [], balance: 0, token: crypto.randomBytes(24).toString('hex') });
   saveUsers(users);
-  res.status(201).json({ nick, warning: 'SAVE your nickname + password. No email, no KYC, no recovery. If you lose it, you lose access.' });
+  const created = users.find(u => u.nick === nick);
+  res.status(201).json({ nick, token: created.token, warning: 'SAVE your nickname + password. No email, no KYC, no recovery. If you lose it, you lose access.' });
 });
 app.post('/api/login', (req, res) => {
   const { nick, pass } = req.body || {};
