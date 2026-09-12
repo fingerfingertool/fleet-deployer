@@ -94,7 +94,7 @@ input::placeholder{color:var(--faint)}
   <nav class="rail" aria-label="Sections">
     <button data-tab="fleet" aria-current="true">Deployments</button>
     <button data-tab="products" aria-current="false">Products</button>
-    <button data-tab="hosts" aria-current="false">VDS hosts</button>
+    <button data-tab="targets" aria-current="false">Targets</button>
     <button data-tab="propagate" aria-current="false">Hotfix propagate</button>
     <div class="hint">Any branch is a reskin. Pick a product, a branch, a host, a domain — ship it.</div>
   </nav>
@@ -107,7 +107,9 @@ input::placeholder{color:var(--faint)}
       <div class="row">
         <select id="fProduct" aria-label="Product"></select>
         <input id="fBranch" placeholder="branch (any branch = reskin)" value="main" size="26">
-        <select id="fHost" aria-label="VDS host"></select>
+        <select id="targetPicker" aria-label="Target"></select>
+        <span id="vdsFields" class="mono dim"></span>
+        <span id="sftpFields" class="mono dim"></span>
         <input id="fDomain" placeholder="domain, e.g. shop2.example.com" size="28">
         <button class="btn" id="fShip">Ship it</button>
       </div>
@@ -123,10 +125,10 @@ input::placeholder{color:var(--faint)}
         <button class="btn" id="pAdd">Add product</button>
       </div>
     </section>
-    <section id="tab-hosts" hidden>
-      <h2>VDS hosts</h2>
-      <p class="sub">Any provider. Add the box, point the domain's A-record at its IP yourself, then ship. Only a key <em>path</em> is stored — never key material.</p>
-      <div id="hostTable"></div>
+    <section id="tab-targets" hidden>
+      <h2>Targets</h2>
+      <p class="sub">VDS or static-sftp. Add the target, point the domain yourself, then ship. Only key <em>paths</em> are stored — never key material.</p>
+      <div id="targetTable"></div>
       <div class="row">
         <input id="hName" placeholder="name, e.g. vds-hetzner-1">
         <input id="hIp" placeholder="IP address" size="16">
@@ -154,16 +156,18 @@ const $=s=>document.querySelector(s), api={
   get:p=>fetch(p).then(r=>r.json()),
   post:(p,b)=>fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(async r=>({ok:r.ok,body:await r.json()}))
 };
-let DB={products:[],hosts:[],deps:[]};
+let DB={products:[],hosts:[],targets:[],deps:[]};
 const beacon=s=>({live:'b-live',draft:'b-draft',failed:'b-failed',drifted:'b-drifted',running:'b-running',queued:'b-queued'}[s]||'b-draft');
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',3200)}
 async function refresh(){
-  [DB.products,DB.hosts,DB.deps]=await Promise.all([api.get('/api/fleet/products'),api.get('/api/fleet/hosts'),api.get('/api/fleet/deployments')]);
+  [DB.products,DB.hosts,DB.targets,DB.deps]=await Promise.all([api.get('/api/fleet/products'),api.get('/api/fleet/hosts'),api.get('/api/fleet/targets'),api.get('/api/fleet/deployments')]);
   $('#tLive').textContent=DB.deps.filter(d=>d.status==='live').length;
-  $('#tShips').textContent=DB.deps.length; $('#tHosts').textContent=DB.hosts.length;
-  renderFleet();renderProducts();renderHosts();
+  $('#tShips').textContent=DB.deps.length; $('#tHosts').textContent=DB.targets.length;
+  renderFleet();renderProducts();renderHosts();renderTargets();
   $('#fProduct').innerHTML=DB.products.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')||'<option value="">— add a product first —</option>';
-  $('#fHost').innerHTML=DB.hosts.map(h=>`<option value="${h.id}">${h.name} · ${h.ip}</option>`).join('')||'<option value="">— add a host first —</option>';
+  $('#targetPicker').innerHTML=DB.targets.map(t=>`<option value="${t.id}">${t.name} · ${t.kind}</option>`).join('')||'<option value="">— add a target first —</option>';
+  const fh=$('#fHost'); if(fh) fh.innerHTML=DB.hosts.map(h=>`<option value="${h.id}">${h.name} · ${h.ip}</option>`).join('')||'<option value="">— add a host first —</option>';
+  updateTargetFields();
 }
 function renderFleet(){
   const el=$('#depTable');
@@ -187,19 +191,45 @@ function renderHosts(){
     DB.hosts.map(h=>`<tr><td><b>${h.name}</b></td><td class="mono">${h.ip}</td><td class="mono dim">${h.sshUser}${h.sshKeyPath?' · key path set':''}</td></tr>`).join('')+`</tbody></table>`
     :`<div class="empty"><p>No hosts yet. Any VDS works — add its IP below.</p></div>`;
 }
-function openDrawer(id){
-  const d=DB.deps.find(x=>x.id===id);if(!d)return;
-  const p=DB.products.find(x=>x.id===d.productId),h=DB.hosts.find(x=>x.id===d.vdsId);
-  $('#drawer').innerHTML=`<h3>${d.domain||'Untitled clone'}</h3>
-    <p class="dim mono">${p?p.name:''} · ${d.branch||''} → ${h?h.name+' ('+h.ip+')':''}</p>
-    <p><span class="beacon ${beacon(d.status)}"></span><span class="mono">${d.status||'draft'}</span>
-    <span class="dim mono"> · ${d.currentCommit?d.currentCommit.slice(0,12):'no commit yet'}</span></p>
-    <ol class="check">
+function renderTargets(){
+  const el=$('#targetTable'); if(!el) return;
+  if(!DB.targets.length){el.innerHTML=`<div class="empty"><p>No targets yet. Add a VDS or static-sftp target below.</p></div>`;return}
+  el.innerHTML=`<table><thead><tr><th>Target</th><th>Kind</th><th>Connection</th></tr></thead><tbody>`+
+    DB.targets.map(t=>`<tr><td><b>${t.name}</b></td><td><span class="mono kind kind-${t.kind}">${t.kind}</span></td><td class="mono dim">${t.kind==='static-sftp'?(t.host||'')+' · '+(t.remoteDir||''):((t.ip||'')+' · '+(t.sshUser||''))}</td></tr>`).join('')+`</tbody></table>`;
+}
+function updateTargetFields(){
+  const sel=$('#targetPicker'); if(!sel) return;
+  const t=DB.targets.find(x=>x.id===sel.value);
+  const kind=t?t.kind:'vds';
+  const v=$('#vdsFields'),s=$('#sftpFields');
+  if(v) v.style.display=kind==='vds'?'':'none';
+  if(s) s.style.display=kind==='static-sftp'?'':'none';
+  if(v) v.textContent=kind==='vds'?'vds: dns → caddy → health':'';
+  if(s) s.textContent=kind==='static-sftp'?'sftp: credentials → build → upload → verify':'';
+}
+function checklistFor(kind,d,h){
+  if(kind==='static-sftp') return `<ol class="check">
+      <li><b>1 · Credentials</b>SFTP login for <span class="mono">${d.domain||''}</span> verified.</li>
+      <li><b>2 · Build</b>Panel clones <span class="mono">${d.branch||''}</span> and builds the static bundle.</li>
+      <li><b>3 · Upload</b>Upload output dir plus <span class="mono">.fleet-sha</span> marker.</li>
+      <li><b>4 · Verify</b>Health check must answer before the beacon turns green.</li>
+    </ol>`;
+  return `<ol class="check">
       <li><b>1 · DNS</b>Point A-record <span class="mono">${d.domain||''}</span> → <span class="mono">${h?h.ip:''}</span> at your registrar.</li>
       <li><b>2 · Ship</b>Panel clones <span class="mono">${d.branch||''}</span>, builds the image, starts the container.</li>
       <li><b>3 · Secure</b>Caddy writes the vhost and fetches the certificate automatically.</li>
       <li><b>4 · Verify</b>Health check must answer before the beacon turns green.</li>
-    </ol>
+    </ol>`;
+}
+function openDrawer(id){
+  const d=DB.deps.find(x=>x.id===id);if(!d)return;
+  const p=DB.products.find(x=>x.id===d.productId),h=DB.hosts.find(x=>x.id===(d.vdsId||d.targetId)),t=DB.targets.find(x=>x.id===(d.targetId||d.vdsId));
+  const kind=t?t.kind:'vds';
+  $('#drawer').innerHTML=`<h3>${d.domain||'Untitled clone'}</h3>
+    <p class="dim mono">${p?p.name:''} · ${d.branch||''} → ${h?h.name+' ('+h.ip+')':''}</p>
+    <p><span class="beacon ${beacon(d.status)}"></span><span class="mono">${d.status||'draft'}</span>
+    <span class="dim mono"> · ${d.currentCommit?d.currentCommit.slice(0,12):'no commit yet'}</span></p>
+    ${checklistFor(kind,d,h)}
     <div class="row"><button class="btn" disabled title="Wires to the deploy queue in the next wave">Deploy</button>
     <button class="btn ghost" id="dClose">Close</button></div>
     <p class="dim" style="font-size:13px">Deploy execution, redeploy and rollback arrive with the SSH worker. This board already tracks what should live where.</p>`;
@@ -211,13 +241,13 @@ $('#scrim').onclick=closeDrawer;
 document.querySelectorAll('.rail button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.rail button').forEach(x=>x.setAttribute('aria-current','false'));
   b.setAttribute('aria-current','true');
-  ['fleet','products','hosts','propagate'].forEach(t=>$('#tab-'+t).hidden=t!==b.dataset.tab);
+  ['fleet','products','targets','propagate'].forEach(t=>$('#tab-'+t).hidden=t!==b.dataset.tab);
 });
 $('#pAdd').onclick=async()=>{const r=await api.post('/api/fleet/products',{name:$('#pName').value.trim(),gitUrl:$('#pGit').value.trim(),defaultBranch:$('#pBranch').value.trim()||'main'});
   r.ok?(toast('Product added.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
 $('#hAdd').onclick=async()=>{const r=await api.post('/api/fleet/hosts',{name:$('#hName').value.trim(),ip:$('#hIp').value.trim(),sshUser:$('#hUser').value.trim()||'root',sshKeyPath:$('#hKey').value.trim()||undefined});
   r.ok?(toast('Host added. Point the domain at its IP.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
-$('#fShip').onclick=async()=>{const r=await api.post('/api/fleet/deployments',{productId:$('#fProduct').value,branch:$('#fBranch').value.trim()||'main',vdsId:$('#fHost').value,domain:$('#fDomain').value.trim(),envValues:{}});
+$('#fShip').onclick=async()=>{const tp=$('#targetPicker');const r=await api.post('/api/fleet/deployments',{productId:$('#fProduct').value,branch:$('#fBranch').value.trim()||'main',targetId:tp?tp.value:undefined,domain:$('#fDomain').value.trim(),envValues:{}});
   r.ok?(toast('Clone charted. Open it for the go-live checklist.'),refresh()):toast('Could not chart: '+(r.body.error||'unknown'));};
 $('#gPlan').onclick=()=>{const head=$('#gHead').value.trim();if(!head){toast('Enter the origin HEAD commit first.');return}
   const rows=DB.deps.map(d=>({d,behind:d.currentCommit!==head}));
@@ -225,6 +255,7 @@ $('#gPlan').onclick=()=>{const head=$('#gHead').value.trim();if(!head){toast('En
     rows.map(({d,behind})=>`<tr><td class="mono">${d.domain||d.id} <span class="dim">${d.currentCommit?d.currentCommit.slice(0,8):'—'}</span></td>
     <td>${behind?'<span class="beacon b-queued"></span>behind — merge origin into '+d.branch+' in git, then redeploy':'<span class="beacon b-live"></span>on HEAD'}</td></tr>`).join('')+`</tbody></table>`;};
 refresh();
+document.addEventListener('change',e=>{if(e.target&&e.target.id==='targetPicker')updateTargetFields()});
 </script>
 </body>
 </html>
