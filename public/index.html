@@ -1,0 +1,85 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GhostName — domains without a paper trail</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg"></head>
+<body>
+<header class="top"><div class="topin">
+<a class="brand" href="/"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C7 2 3.5 6 3.5 11v9l2.7-2 2.5 2 2.4-2 2.5 2 2.4-2 2.5 2 2-2v-7C20.5 6 17 2 12 2Z" fill="#ff5c1a"/><circle cx="9" cy="10" r="1.6" fill="#0c0f0e"/><circle cx="15" cy="10" r="1.6" fill="#0c0f0e"/></svg>GhostName</a>
+<nav><a href="#why">Why this exists</a><a href="/dashboard.html">Dashboard</a><a href="#pricing">Pricing</a></nav>
+<span class="sp"></span>
+<a class="btn quiet sm" href="/cart.html">Cart · <span data-cartcount>0</span></a>
+<button class="btn line sm" id="dashBtn" onclick="location.href='/dashboard.html'">Dashboard</button>
+</div></header>
+<main>
+<div class="wrap rise" style="padding-top:84px">
+<h1>Domains without<br>a <span class="u">paper trail.</span></h1>
+<p class="sub">Register any available name on earth. No email, no identity checks, no card on file. Pay in crypto, first year half price, done in minutes.</p>
+<div class="console" id="search">
+<div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="mono">claim — live registry lookup</span></div>
+<div class="prompt">
+<span class="ps1 mono">ghost@registry:~$ claim</span>
+<div class="suggest"><input id="q" placeholder="a name or a seed — exact matches and twists come back together" autocomplete="off"><div class="sdrop" id="sdrop"></div></div>
+<select id="years" aria-label="term"><option value="1">1 year, half price</option><option value="2">2 years</option><option value="5">5 years</option></select>
+<button class="btn ember" onclick="go()">Check availability</button>
+</div>
+<div id="results"><p class="note">Nothing checked yet. Type a name above — taken names are filtered out, never listed.</p></div>
+</div>
+<div class="stats"><div><b>25+</b><span>extensions, worldwide</span></div><div><b>−50%</b><span>first year, every TLD</span></div><div><b>11</b><span>coins accepted</span></div><div><b>0</b><span>emails, IDs, logs kept</span></div></div>
+</div>
+<section class="wrap" id="why">
+<h2>Why this exists</h2>
+<p class="lede">Registrars turned your domain into an identity file. This one treats it like cash: whoever holds the credentials owns it, nobody asks who you are.</p>
+<div class="rows">
+<div class="row"><h3>Checkout without identity</h3><p>A nickname and a password open the whole account. No inbox to confirm, no document to upload, no waiting room before you own the name.</p><span class="tag">no KYC, no email</span></div>
+<div class="row"><h3>Money that can't snitch</h3><p>Bitcoin, Monero, Litecoin, Ethereum, stablecoins and more. No card number sitting in a billing database next to your domains.</p><span class="tag">11 coins</span></div>
+<div class="row"><h3>Answers from the registry itself</h3><p>Every check goes to the authoritative RDAP server for that ending. If a name shows up here, it is claimable right now — taken ones never appear.</p><span class="tag">live RDAP</span></div>
+<div class="row"><h3>Half price to start</h3><p>First year at 50% off on every ending, priced off live wholesale feeds. Renewals print at the honest rate next to it, no gotcha step-up.</p><span class="tag">−50% year one</span></div>
+</div>
+</section>
+<section class="wrap" id="pricing">
+<h2>Pricing</h2>
+<p class="lede" id="src">Live wholesale feed.</p>
+<table class="price"><thead><tr><th>Ending</th><th style="text-align:right">First year</th><th style="text-align:right">Renewal</th></tr></thead><tbody id="tlds"></tbody></table>
+<p style="margin-top:18px"><a class="btn ember" href="/cart.html">Review staged names</a></p>
+</section>
+</main>
+<footer>GhostName — the registry that never learned your name. First year half price, forever.</footer>
+<div id="toasts"></div>
+<script src="/app.js"></script>
+<script>
+document.getElementById('years').value = store.years;
+document.getElementById('years').onchange = e => { store.years = e.target.value; };
+const AFF={pre:['get','try','go','my','use','hey','lets','join'],suf:['ly','hub','labs','base','hq','os','fi','ery','ify','stack','wise','forge']};
+function stems(s){s=s.toLowerCase().replace(/[^a-z0-9]/g,'');if(s.length<2)return[];const o=[];
+AFF.pre.slice(0,6).forEach(p=>o.push({t:p+s,a:'prefix '+p}));AFF.suf.slice(0,6).forEach(x=>o.push({t:s+x,a:'suffix '+x}));return o.slice(0,10);}
+function hideSdrop(){document.getElementById('sdrop').className='sdrop';}
+document.getElementById('q').addEventListener('input',e=>{const v=e.target.value;const box=document.getElementById('sdrop');
+const list=stems(v);if(!list.length){hideSdrop();return;}
+box.className='sdrop open';
+box.innerHTML=list.map((s,i)=>`<button class="${i===0?'hot':''}" onclick="pickSug('${s.t}')"><span class="stem mono">${s.t}</span><span class="aff">${s.a}</span></button>`).join('');});
+document.addEventListener('click',e=>{if(!e.target.closest('.suggest'))hideSdrop();});
+function pickSug(s){document.getElementById('q').value=s;hideSdrop();go();}
+function line(x,verb){return `<div class="dline"><span class="mono" style="font-weight:600">${x.domain}</span><span class="ok">free to claim</span><span class="pr"><s>$${x.pricing.baseYearly}</s> <b>$${x.pricing.firstYear}</b> yr1 · $${x.pricing.total}/${x.pricing.years}yr</span><button onclick="addToCart('${x.domain}')">${verb||'Stage'}</button></div>`;}
+async function go(){const q=document.getElementById('q').value.trim()||'ghostbrand';hideSdrop();store.years=document.getElementById('years').value;const years=store.years;
+const box=document.getElementById('results');box.innerHTML='<p class="note mono">asking the registries…</p>';
+try{
+const [ex,mo]=await Promise.all([
+api(`/api/search?name=${encodeURIComponent(q)}&years=${years}`),
+api(`/api/monster?seed=${encodeURIComponent(q)}&years=${years}`)
+]);
+const efree=ex.results.filter(x=>x.available===true);
+const mfree=mo.results.filter(x=>x.available===true);
+const seen=new Set(efree.map(x=>x.domain));
+const twists=mfree.filter(x=>!seen.has(x.domain));
+box.innerHTML=
+(efree.length?`<p class="note">Exact matches — ${efree.length} free.</p>`+efree.map(x=>line(x)).join(''):'<p class="note">Exact name is taken everywhere worth having.</p>')
++(twists.length?`<p class="note" style="margin-top:14px">Twists on “${mo.seed}” — ${twists.length} free.</p>`+twists.map(x=>line(x)).join(''):'');
+if(!efree.length&&!twists.length)box.innerHTML='<p class="note">Nothing free under that spelling. Try a rarer word.</p>';}
+catch(e){toast('Registries silent', e.message);box.innerHTML='<p class="note">The registries did not answer. Check the connection and try again.</p>';}}
+async function loadTlds(){try{const t=await api('/api/tlds');const s=await api('/api/pricing-source');
+document.getElementById('src').textContent='Live wholesale feed · '+s.source+'. First year already halved in the table.';
+document.getElementById('tlds').innerHTML=t.map(x=>`<tr><td class="mono">${x.tld}</td><td class="num"><s>$${x.baseYearly}</s> <b>$${x.firstYear}</b></td><td class="num mono">$${x.baseYearly}</td></tr>`).join('');}
+catch(e){toast('Pricing offline', e.message);}}
+loadTlds();
+</script></body></html>

@@ -1,0 +1,53 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cart — GhostName</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg"></head>
+<body>
+<header class="top"><div class="topin">
+<a class="brand" href="/"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C7 2 3.5 6 3.5 11v9l2.7-2 2.5 2 2.4-2 2.5 2 2.4-2 2.5 2 2-2v-7C20.5 6 17 2 12 2Z" fill="#ff5c1a"/><circle cx="9" cy="10" r="1.6" fill="#0c0f0e"/><circle cx="15" cy="10" r="1.6" fill="#0c0f0e"/></svg>GhostName</a>
+<nav><a href="/">Search</a><a href="/dashboard.html">Dashboard</a><a href="/cart.html" class="on">Cart</a></nav>
+<span class="sp"></span>
+<button class="btn line sm" id="dashBtn" onclick="location.href='/dashboard.html'">Dashboard</button>
+</div></header>
+<main><div class="wrap rise">
+<h2>Staged names</h2>
+<p class="lede">Checked against the registries, held here until you settle. Checkout needs a nickname — the Dashboard mints one.</p>
+<div style="display:flex;gap:10px;align-items:center;margin:16px 0">
+<label class="note" for="years">Term</label>
+<select id="years" aria-label="term" style="font:inherit;background:var(--ink2);border:1px solid #2b332e;color:var(--paper);border-radius:9px;padding:11px 14px"><option value="1">1 year, half price</option><option value="2">2 years</option><option value="5">5 years</option></select>
+</div>
+<div class="panel"><div id="lines"><p class="note">Nothing staged. Go claim something free.</p></div>
+<div class="kv" style="margin-top:8px"><span>Total</span><b class="mono" id="total">—</b></div></div>
+<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:18px">
+<button class="btn ember" onclick="payCrypto()">Pay with crypto</button>
+<button class="btn line" onclick="payBalance()">Pay with balance</button>
+<a class="btn quiet" href="/">Keep browsing</a></div>
+<p class="note" style="margin-top:10px">Crypto opens an invoice with an address. Balance settles instantly if it covers the total.</p>
+</div></main>
+<footer>GhostName — the registry that never learned your name.</footer>
+<div id="toasts"></div>
+<script src="/app.js"></script>
+<script>
+let pricing={};
+document.getElementById('years').value=store.years;
+document.getElementById('years').onchange=e=>{store.years=e.target.value;render();};
+async function loadPricing(){try{const t=await api('/api/tlds');pricing={};t.forEach(x=>pricing[x.tld]=x);}catch(e){toast('Pricing offline',e.message,'err');}render();}
+function linePrice(d){const tld='.'+d.split('.').pop();const p=pricing[tld]||{baseYearly:14.98,firstYear:7.49};const y=Number(store.years)||1;
+return {yr1:p.firstYear,total:+(p.firstYear+p.baseYearly*(y-1)).toFixed(2),base:p.baseYearly};}
+function render(){const c=store.cart;const box=document.getElementById('lines');
+if(!c.length){box.innerHTML='<p class="note">Nothing staged. Go claim something free.</p>';document.getElementById('total').textContent='—';return;}
+let t=0;box.innerHTML=c.map(d=>{const p=linePrice(d);t+=p.total;
+return `<div class="domitem"><span class="mono" style="font-weight:600">${d}</span><span class="exp mono">$${p.total} / ${store.years}yr</span><button class="btn quiet sm" onclick="un('${d}')">Remove</button></div>`;}).join('');
+document.getElementById('total').textContent='$'+t.toFixed(2);}
+function un(d){removeFromCart(d);render();toast('Removed',d);}
+async function payCrypto(){if(!authed())return needAuth();if(!store.cart.length){toast('Cart empty','Stage a free name first.','err');return;}
+try{const j=await api('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domains:store.cart,years:Number(store.years),token:store.tok})});
+store.cart=[];render();toast('Order '+j.order.id+' reserved','$'+j.order.total+'. Invoice address is the next step.','ok');}
+catch(e){toast('Checkout refused',e.message,'err');}}
+async function payBalance(){if(!authed())return needAuth();if(!store.cart.length){toast('Cart empty','Stage a free name first.','err');return;}
+try{const j=await api('/api/pay-balance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:store.tok,domains:store.cart,years:Number(store.years)})});
+store.cart=[];render();refreshHeader();toast('Settled from balance','$'+j.total+' · balance $'+j.balance+'. Names are in the Dashboard.','ok');}
+catch(e){toast('Balance refused',e.message,'err');}}
+loadPricing();
+</script></body></html>

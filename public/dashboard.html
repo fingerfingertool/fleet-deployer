@@ -1,0 +1,63 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard — GhostName</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg"></head>
+<body>
+<header class="top"><div class="topin">
+<a class="brand" href="/"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C7 2 3.5 6 3.5 11v9l2.7-2 2.5 2 2.4-2 2.5 2 2.4-2 2.5 2 2-2v-7C20.5 6 17 2 12 2Z" fill="#ff5c1a"/><circle cx="9" cy="10" r="1.6" fill="#0c0f0e"/><circle cx="15" cy="10" r="1.6" fill="#0c0f0e"/></svg>GhostName</a>
+<nav><a href="/">Search</a><a href="/dashboard.html" class="on">Dashboard</a><a href="/cart.html">Cart</a></nav>
+<span class="sp"></span>
+<a class="btn quiet sm" href="/cart.html">Cart · <span data-cartcount>0</span></a>
+</div></header>
+<main><div class="wrap rise">
+<h2>Dashboard</h2>
+<p class="lede">Your names, your balance, one nickname holding it together.</p>
+<div class="slip" id="gate">
+<h2>Log in or mint a nickname</h2>
+<p style="margin:6px 0 0">This slip is the only key — there is no spare.</p>
+<div class="warn">There is no password reset. Write the nickname and password down somewhere safe. Lose them and the account, balance and domains are gone for good.</div>
+<div class="frow">
+<input id="nick" placeholder="nickname" autocomplete="username">
+<input id="pass" type="password" placeholder="password, 6+ characters" autocomplete="current-password">
+<button class="btn ember" onclick="signup()">Create nickname account</button>
+<button class="btn line" style="color:#141310;border-color:#141310" onclick="login()">Log in</button>
+</div></div>
+<div id="panel" style="display:none">
+<div class="panel"><div class="kv"><span>Nickname</span><b class="mono" id="dNick">—</b></div>
+<div class="kv"><span>Balance</span><b class="mono" id="dBal">—</b></div>
+<div class="kv"><span>Names held</span><b class="mono" id="dCount">—</b></div></div>
+<div class="panel"><h3 style="margin:0 0 4px">Top up with crypto</h3>
+<p class="note">Demo till BTCPay is wired: credits the account straight away.</p>
+<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+<input id="amt" type="number" min="1" value="25" style="font:inherit;background:#0a0d0c;border:1px solid #2b332e;color:var(--paper);border-radius:9px;padding:11px 14px;width:130px">
+<button class="btn ember sm" onclick="topup()">Credit demo funds</button>
+<button class="btn quiet sm" onclick="logout()">Log out</button></div></div>
+<div class="panel"><h3 style="margin:0 0 6px">Registered names</h3><div id="doms"><p class="note">Nothing registered under this nickname yet.</p></div></div>
+</div></div></main>
+<footer>GhostName — the registry that never learned your name.</footer>
+<div id="toasts"></div>
+<script src="/app.js"></script>
+<script>
+async function signup(){const nick=document.getElementById('nick').value.trim(),pass=document.getElementById('pass').value;
+try{const j=await api('/api/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nick,pass})});
+toast('Nickname "'+j.nick+'" minted', j.warning, 'ok');}
+catch(e){toast('Could not mint nickname', e.message, 'err');}}
+async function login(){const nick=document.getElementById('nick').value.trim(),pass=document.getElementById('pass').value;
+if(!nick||!pass){toast('Missing fields','Type the nickname and password first.','err');return;}
+try{const j=await api('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nick,pass})});
+localStorage.setItem('tok',j.token);toast('Welcome back','Logged in as '+j.nick+'.','ok');showPanel();}
+catch(e){toast('Login refused', e.message, 'err');}}
+async function showPanel(){if(!store.tok)return;try{const me=await api('/api/me',{headers:{'x-token':store.tok}});
+document.getElementById('gate').style.display='none';document.getElementById('panel').style.display='';
+document.getElementById('dNick').textContent=me.nick;
+document.getElementById('dBal').textContent='$'+me.balance.toFixed(2);
+document.getElementById('dCount').textContent=me.domains.length;
+document.getElementById('doms').innerHTML=me.domains.length?me.domains.map(d=>`<div class="domitem"><span class="mono" style="font-weight:600">${d.domain}</span><span class="exp mono">${d.years}yr · ${d.date.slice(0,10)}</span></div>`).join(''):'<p class="note">Nothing registered under this nickname yet.</p>';}
+catch(e){localStorage.removeItem('tok');toast('Session expired','Log in again.','err');}}
+async function topup(){const amount=Number(document.getElementById('amt').value)||25;
+try{const j=await api('/api/topup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:store.tok,amount})});
+toast('Balance credited','New balance $'+j.balance.toFixed(2)+'.','ok');showPanel();refreshHeader();}
+catch(e){toast('Top-up failed', e.message, 'err');}}
+showPanel();
+</script></body></html>

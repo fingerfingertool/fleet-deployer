@@ -1,0 +1,18 @@
+services:
+  ghostname:
+    build: .
+    image: ghostname:latest
+    container_name: ghostname
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      PORT: 3000
+      DATA_DIR: /app/data
+      # PORKBUN_API_KEY: ${PORKBUN_API_KEY:-}
+      # PORKBUN_SECRET: ${PORKBUN_SECRET:-}
+    volumes:
+      - ghostname-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  ghostname-data:
