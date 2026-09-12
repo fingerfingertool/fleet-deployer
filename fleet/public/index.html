@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Fleet Deployer</title></head>
+<body>
+<h1>Fleet Deployments</h1>
+<table border="1"><thead><tr><th>Branch</th><th>Domain</th><th>Status</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table>
+<script>
+fetch('/api/fleet/deployments').then(r => r.json()).then(deps => {
+  const tb = document.getElementById('rows');
+  deps.forEach(d => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td></td><td></td><td></td><td><button>Deploy</button> <button>Redeploy</button></td>';
+    tr.children[0].textContent = d.branch || '';
+    tr.children[1].textContent = d.domain || '';
+    tr.children[2].textContent = d.status || '';
+    tb.appendChild(tr);
+  });
+});
+</script>
+</body>
+</html>

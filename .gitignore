@@ -4,3 +4,5 @@ npm-debug.log
 domains.json
 users.json
 /tmp/
+.superpowers/
+fleet.json
