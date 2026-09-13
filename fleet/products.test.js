@@ -25,3 +25,13 @@ test('branches endpoint 404 on unknown product', async () => {
   const app = buildApp(':memory:');
   expect((await request(app).get('/api/fleet/products/nope/branches')).status).toBe(404);
 });
+test('PUT accepts publish config, rejects bad strategy', async () => {
+  const request = require('supertest');
+  const { buildApp } = require('./server');
+  const app = buildApp(':memory:');
+  const p = (await request(app).post('/api/fleet/products').send({ name: 's', gitUrl: 'https://x/y.git' })).body;
+  const ok = await request(app).put('/api/fleet/products/' + p.id).send({ publish: { strategy: 'ftp-static', sourceDir: 'public', extraFiles: ['api.php'], exclude: ['*.json'] } });
+  expect(ok.status).toBe(200);
+  expect(ok.body.publish.strategy).toBe('ftp-static');
+  expect((await request(app).put('/api/fleet/products/' + p.id).send({ publish: { strategy: 'nope' } })).status).toBe(400);
+});

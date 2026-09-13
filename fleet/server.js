@@ -105,6 +105,18 @@ function buildApp(file) {
       if (repoKeyPath !== null && (typeof repoKeyPath !== 'string' || repoKeyPath.length > 512)) return res.status(400).json({ error: 'repoKeyPath must be a path of max 512 chars' });
       if (repoKeyPath) p.repoKeyPath = repoKeyPath; else delete p.repoKeyPath;
     }
+    if (req.body.publish !== undefined) {
+      const pub = req.body.publish;
+      if (typeof pub !== 'object' || pub === null) return res.status(400).json({ error: 'invalid publish' });
+      if (pub.strategy !== undefined && pub.strategy !== 'ftp-static') return res.status(400).json({ error: 'unsupported publish strategy' });
+      for (const f of ['buildCommand', 'sourceDir']) {
+        if (pub[f] !== undefined && pub[f] !== null && (typeof pub[f] !== 'string' || pub[f].length > 256)) return res.status(400).json({ error: 'invalid publish.' + f });
+      }
+      for (const f of ['extraFiles', 'exclude']) {
+        if (pub[f] !== undefined && (!Array.isArray(pub[f]) || pub[f].some(x => typeof x !== 'string' || x.length > 256))) return res.status(400).json({ error: 'invalid publish.' + f });
+      }
+      p.publish = pub;
+    }
     if (webhookSecretRef !== undefined) {
       if (typeof webhookSecretRef !== 'string' || webhookSecretRef.length > 128 || !/^[A-Z0-9_]+$/.test(webhookSecretRef)) return res.status(400).json({ error: 'invalid webhookSecretRef' });
       p.webhookSecretRef = webhookSecretRef;
