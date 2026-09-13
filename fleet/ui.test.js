@@ -46,3 +46,7 @@ test('bindings is a separate screen with unbind', () => {
   expect(html).toMatch('tab-bindings');
   expect(html).toMatch('data-unbind');
 });
+test('add-product row has repo key path input', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('pKey');
+});

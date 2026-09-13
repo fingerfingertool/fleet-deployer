@@ -126,6 +126,7 @@ input::placeholder{color:var(--faint)}
         <input id="pName" placeholder="name, e.g. ecom-shop">
         <input id="pGit" placeholder="git url" size="34">
         <input id="pBranch" placeholder="default branch" value="main" size="14">
+        <input id="pKey" placeholder="repo key path (private repos)" size="26">
         <button class="btn" id="pAdd">Add product</button>
       </div>
     </section>
@@ -311,7 +312,7 @@ document.querySelectorAll('.rail button').forEach(b=>b.onclick=()=>{
   try{localStorage.setItem('fleet-tab',b.dataset.tab)}catch{}
 });
 try{const last=localStorage.getItem('fleet-tab');if(last&&$('#tab-'+last))document.querySelector(`.rail button[data-tab="${last}"]`).click()}catch{}
-$('#pAdd').onclick=async()=>{const r=await api.post('/api/fleet/products',{name:$('#pName').value.trim(),gitUrl:$('#pGit').value.trim(),defaultBranch:$('#pBranch').value.trim()||'main'});
+$('#pAdd').onclick=async()=>{const r=await api.post('/api/fleet/products',{name:$('#pName').value.trim(),gitUrl:$('#pGit').value.trim(),defaultBranch:$('#pBranch').value.trim()||'main',repoKeyPath:$('#pKey').value.trim()||undefined});
   r.ok?(toast('Product added.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
 $('#hAdd').onclick=async()=>{const r=await api.post('/api/fleet/hosts',{name:$('#hName').value.trim(),ip:$('#hIp').value.trim(),sshUser:$('#hUser').value.trim()||'root',sshKeyPath:$('#hKey').value.trim()||undefined});
   r.ok?(toast('Host added. Point the domain at its IP.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};

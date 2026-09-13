@@ -53,9 +53,13 @@ function buildApp(file) {
   });
   app.use('/api/fleet', basicAuth);
   app.post('/api/fleet/products', (req, res) => {
-    const { name, gitUrl, defaultBranch, buildConfig } = req.body || {};
+    const { name, gitUrl, defaultBranch, buildConfig, repoKeyPath } = req.body || {};
     if (!name || !gitUrl) return res.status(400).json({ error: 'name and gitUrl required' });
     const product = { name, gitUrl, defaultBranch: defaultBranch || 'main' };
+    if (repoKeyPath !== undefined && repoKeyPath !== null && repoKeyPath !== '') {
+      if (typeof repoKeyPath !== 'string' || repoKeyPath.length > 512) return res.status(400).json({ error: 'repoKeyPath must be a path of max 512 chars' });
+      product.repoKeyPath = repoKeyPath;
+    }
     if (buildConfig !== undefined) {
       if (typeof buildConfig !== 'object' || buildConfig === null) return res.status(400).json({ error: 'invalid buildConfig' });
       const { command, outputDir } = buildConfig;

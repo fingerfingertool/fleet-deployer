@@ -35,3 +35,12 @@ test('PUT accepts publish config, rejects bad strategy', async () => {
   expect(ok.body.publish.strategy).toBe('ftp-static');
   expect((await request(app).put('/api/fleet/products/' + p.id).send({ publish: { strategy: 'nope' } })).status).toBe(400);
 });
+test('POST accepts repoKeyPath, rejects overlong', async () => {
+  const request = require('supertest');
+  const { buildApp } = require('./server');
+  const app = buildApp(':memory:');
+  const ok = await request(app).post('/api/fleet/products').send({ name: 's', gitUrl: 'https://x/y.git', repoKeyPath: '/app/keys/x' });
+  expect(ok.status).toBe(201);
+  expect(ok.body.repoKeyPath).toBe('/app/keys/x');
+  expect((await request(app).post('/api/fleet/products').send({ name: 't', gitUrl: 'https://x/y.git', repoKeyPath: 'x'.repeat(513) })).status).toBe(400);
+});
