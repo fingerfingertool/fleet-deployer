@@ -1,11 +1,28 @@
 const express = require('express');
 const { createStore } = require('./store');
 const ALLOWED_KINDS = ['vds', 'static-sftp'];
+function basicAuth(req, res, next) {
+  const user = process.env.FLEET_USER, pass = process.env.FLEET_PASS;
+  if (!user || !pass) return next();
+  const hdr = req.headers.authorization || '';
+  const [scheme, encoded] = hdr.split(' ');
+  let ok = false;
+  if (scheme === 'Basic' && encoded) {
+    const [u, ...rest] = Buffer.from(encoded, 'base64').toString('utf8').split(':');
+    ok = u === user && rest.join(':') === pass;
+  }
+  if (!ok) {
+    res.set('WWW-Authenticate', 'Basic realm="Fleet Harbor"');
+    return res.status(401).json({ error: 'auth required' });
+  }
+  next();
+}
 function buildApp(file) {
   const store = createStore(file || 'fleet.json');
   const app = express();
   app.use(express.json());
   app.get('/api/fleet/health', (req, res) => res.json({ ok: true }));
+  app.use('/api/fleet', basicAuth);
   app.post('/api/fleet/products', (req, res) => {
     const { name, gitUrl, defaultBranch, buildConfig } = req.body || {};
     if (!name || !gitUrl) return res.status(400).json({ error: 'name and gitUrl required' });
@@ -92,4 +109,4 @@ function buildApp(file) {
   app.get('/api/fleet/hosts', (req, res) => res.json(store.listHosts()));
   return app;
 }
-module.exports = { buildApp };
+module.exports = { buildApp, basicAuth };

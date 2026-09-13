@@ -6,3 +6,5 @@ users.json
 /tmp/
 .superpowers/
 fleet.json
+fleet.env
+.keys/

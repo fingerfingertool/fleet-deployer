@@ -181,7 +181,7 @@ function renderFleet(){
     DB.deps.map(d=>{const p=DB.products.find(x=>x.id===d.productId),h=DB.hosts.find(x=>x.id===d.vdsId);
       return `<tr><td><span class="beacon ${beacon(d.status)}"></span><span class="mono">${d.status||'draft'}</span></td>
       <td><b>${p?p.name:'?'}</b> <span class="mono dim">${d.branch||''}</span></td>
-      <td class="mono">${d.domain||''}<br><span class="dim">${h?h.name+' · '+h.ip:''}</span></td>
+      <td class="mono"><a href="https://${d.domain||''}" target="_blank" rel="noopener">${d.domain||''}</a><br><span class="dim">${h?h.name+' · '+h.ip:''}</span></td>
       <td class="mono dim">${d.currentCommit?d.currentCommit.slice(0,8):'— not shipped —'}</td>
       <td><button class="btn ghost small" data-open="${d.id}">Open</button></td></tr>`}).join('')+`</tbody></table>`;
   el.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.open));
@@ -200,8 +200,16 @@ function renderHosts(){
 function renderTargets(){
   const el=$('#targetTable'); if(!el) return;
   if(!DB.targets.length){el.innerHTML=`<div class="empty"><p>No targets yet. Add a VDS or static-sftp target below.</p></div>`;return}
-  el.innerHTML=`<table><thead><tr><th>Target</th><th>Kind</th><th>Connection</th></tr></thead><tbody>`+
-    DB.targets.map(t=>`<tr><td><b>${t.name}</b></td><td><span class="mono kind kind-${t.kind}">${t.kind}</span></td><td class="mono dim">${t.kind==='static-sftp'?(t.host||'')+' · '+(t.remoteDir||''):((t.ip||'')+' · '+(t.sshUser||''))}</td></tr>`).join('')+`</tbody></table>`;
+  el.innerHTML=`<table><thead><tr><th>Target</th><th>Kind</th><th>Connection</th><th>Link</th><th></th></tr></thead><tbody>`+
+    DB.targets.map(t=>{const links=DB.deps.filter(d=>(d.targetId||d.vdsId)===t.id&&d.domain)
+      .map(d=>`<a href="https://${d.domain}" target="_blank" rel="noopener">${d.domain}</a>`).join('<br>');
+    return `<tr><td><b>${t.name}</b></td><td><span class="mono kind kind-${t.kind}">${t.kind}</span></td><td class="mono dim">${t.kind==='static-sftp'?(t.host||'')+' · '+(t.remoteDir||''):((t.ip||'')+' · '+(t.sshUser||''))}</td><td>${links||'<span class="dim">—</span>'}</td><td><button class="btn ghost small" data-del-target="${t.id}">Delete</button></td></tr>`}).join('')+`</tbody></table>`;
+  el.querySelectorAll('[data-del-target]').forEach(b=>b.onclick=async()=>{
+    const used=DB.deps.filter(d=>(d.targetId||d.vdsId)===b.dataset.delTarget).length;
+    if(!confirm(used?`Delete this target? ${used} deployment(s) reference it and will be orphaned.`:'Delete this target?'))return;
+    const r=await fetch('/api/fleet/targets/'+b.dataset.delTarget,{method:'DELETE'});
+    r.ok?(toast('Target deleted.'),refresh()):toast('Could not delete.');
+  });
 }
 function updateTargetFields(){
   const sel=$('#targetPicker'); if(!sel) return;

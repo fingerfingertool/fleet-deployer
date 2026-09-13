@@ -10,6 +10,8 @@ services:
     environment:
       FLEET_PORT: 3100
       FLEET_DB: /app/data/fleet.json
+    env_file:
+      - fleet.env
     volumes:
       - fleet-data:/app/data
     restart: unless-stopped

@@ -11,3 +11,8 @@ test('targets tab has sftp creation inputs and kind toggle wiring POST /api/flee
   // VDS row still working
   for (const id of ['hName', 'hIp', 'hUser', 'hAdd']) expect(html).toMatch(id);
 });
+test('targets table has delete buttons and clickable site links', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('data-del-target');
+  expect(html).toMatch('target="_blank"');
+});
