@@ -1,5 +1,6 @@
 const express = require('express');
 const { createStore } = require('./store');
+const { createWorker } = require('./worker');
 const ALLOWED_KINDS = ['vds', 'static-sftp'];
 function basicAuth(req, res, next) {
   const user = process.env.FLEET_USER, pass = process.env.FLEET_PASS;
@@ -164,6 +165,22 @@ function buildApp(file) {
   });
   app.get('/api/fleet/products', (req, res) => res.json(store.listProducts()));
   app.get('/api/fleet/hosts', (req, res) => res.json(store.listHosts()));
+  const worker = createWorker(store);
+  app.locals.store = store;
+  app.locals.worker = worker;
+  app.post('/api/fleet/deployments/:id/deploy', (req, res) => {
+    const d = store.listDeployments().find(x => x.id === req.params.id);
+    if (!d) return res.status(404).json({ error: 'unknown deployment' });
+    app.locals.worker.queue(d.id, 'manual').catch(() => {});
+    res.status(202).json({ queued: true });
+  });
+  app.post('/api/fleet/runs/:runId/retry', (req, res) => {
+    const r = store.getRun(req.params.runId);
+    if (!r) return res.status(404).json({ error: 'unknown run' });
+    if (r.status !== 'failed') return res.status(400).json({ error: 'only failed runs can be retried' });
+    app.locals.worker.queue(r.deploymentId, 'retry', r.id).catch(() => {});
+    res.status(202).json({ queued: true, retryOf: r.id });
+  });
   return app;
 }
 module.exports = { buildApp, basicAuth };
