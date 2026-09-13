@@ -101,10 +101,13 @@ async function runSteps({ store, deployment, run }, log = () => {}) {
         say(`uploading ${plan.sourceDir || 'public'}/ to ${target.remoteDir}`);
         try {
           await withTimeout((async () => {
-            // FTP accounts are typically jailed: absolute remoteDir would
-            // resolve nested inside the jail, so cd into it and use
-            // relative remote names. Docroot must exist (cPanel creates it).
-            try { await client.cd(target.remoteDir); }
+            // FTP accounts are typically jailed at the account home:
+            // a cPanel-absolute remoteDir like /home/<user>/<dir> must be
+            // reduced to jail-relative /<dir>, otherwise uploads land
+            // nested inside the jail. Targets keep the true absolute path
+            // (useful for future SSH); only the FTP wire is normalized.
+            const jailRelative = target.remoteDir.replace(/^\/home\/[^/]+/, '') || '/';
+            try { await client.cd(jailRelative); }
             catch { throw coded('upload-failed', 'remote dir not reachable: ' + target.remoteDir); }
             // upload sourceDir contents (idempotent: re-run overwrites)
             const items = fs.existsSync(sourceDir) ? fs.readdirSync(sourceDir) : [];
