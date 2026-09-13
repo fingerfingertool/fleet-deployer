@@ -185,7 +185,18 @@ function buildApp(file) {
     };
     res.status(201).json(store.saveDeployment(deployment));
   });
-  app.get('/api/fleet/deployments', (req, res) => res.json(store.listDeployments()));
+  app.get('/api/fleet/deployments', (req, res) => {
+    const w = app.locals.worker;
+    res.json(store.listDeployments().map((d) => {
+      if ((d.status === 'queued' || d.status === 'running') && w && typeof w.queueLength === 'function') {
+        try {
+          const n = w.queueLength(d.targetId || d.vdsId);
+          if (n) return { ...d, queuePosition: n };
+        } catch {}
+      }
+      return d;
+    }));
+  });
   app.get('/api/fleet/deployments/:id/runs', (req, res) => {
     const d = store.listDeployments().find(x => x.id === req.params.id);
     if (!d) return res.status(404).json({ error: 'unknown deployment' });
