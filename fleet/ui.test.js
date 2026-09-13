@@ -16,3 +16,9 @@ test('targets table has delete buttons and clickable site links', () => {
   expect(html).toMatch('data-del-target');
   expect(html).toMatch('target="_blank"');
 });
+test('products table has edit/delete and branch select wiring', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('data-edit-product');
+  expect(html).toMatch('data-del-product');
+  expect(html).toMatch('/branches');
+});

@@ -38,6 +38,53 @@ function buildApp(file) {
     }
     res.status(201).json(store.saveProduct(product));
   });
+  app.get('/api/fleet/products/:id/branches', (req, res) => {
+    const p = store.getProduct(req.params.id);
+    if (!p) return res.status(404).json({ error: 'unknown product' });
+    const { execFile } = require('child_process');
+    const env = { ...process.env };
+    if (p.repoKeyPath) {
+      if (typeof p.repoKeyPath !== 'string' || p.repoKeyPath.length > 512) return res.status(400).json({ error: 'invalid repoKeyPath' });
+      env.GIT_SSH_COMMAND = `ssh -i ${p.repoKeyPath} -o StrictHostKeyChecking=no -o BatchMode=yes`;
+    }
+    execFile('git', ['ls-remote', '--heads', p.gitUrl], { env, timeout: 20000 }, (err, stdout) => {
+      if (err) return res.status(502).json({ error: 'could not list branches' });
+      const branches = stdout.split('\n').filter(Boolean).map(l => l.split('\t')[1].replace('refs/heads/', ''));
+      res.json({ branches });
+    });
+  });
+  app.put('/api/fleet/products/:id', (req, res) => {
+    const p = store.getProduct(req.params.id);
+    if (!p) return res.status(404).json({ error: 'unknown product' });
+    const { name, gitUrl, defaultBranch, buildConfig, repoKeyPath } = req.body || {};
+    if (name !== undefined) p.name = name;
+    if (gitUrl !== undefined) p.gitUrl = gitUrl;
+    if (defaultBranch !== undefined) p.defaultBranch = defaultBranch || 'main';
+    if (buildConfig !== undefined) {
+      if (typeof buildConfig !== 'object' || buildConfig === null) return res.status(400).json({ error: 'invalid buildConfig' });
+      p.buildConfig = {};
+      if (buildConfig.command !== undefined) {
+        if (typeof buildConfig.command !== 'string' || buildConfig.command.length > 256) return res.status(400).json({ error: 'invalid buildConfig.command' });
+        p.buildConfig.command = buildConfig.command;
+      }
+      if (buildConfig.outputDir !== undefined) {
+        if (typeof buildConfig.outputDir !== 'string' || buildConfig.outputDir.length > 256 || buildConfig.outputDir.includes('..')) return res.status(400).json({ error: 'invalid buildConfig.outputDir' });
+        p.buildConfig.outputDir = buildConfig.outputDir;
+      }
+    }
+    if (repoKeyPath !== undefined) {
+      if (repoKeyPath !== null && (typeof repoKeyPath !== 'string' || repoKeyPath.length > 512)) return res.status(400).json({ error: 'repoKeyPath must be a path of max 512 chars' });
+      if (repoKeyPath) p.repoKeyPath = repoKeyPath; else delete p.repoKeyPath;
+    }
+    const { privateKey, sshKey, password, keyMaterial, ...rest } = p;
+    res.json(store.saveProduct(rest));
+  });
+  app.delete('/api/fleet/products/:id', (req, res) => {
+    if (!store.getProduct(req.params.id)) return res.status(404).json({ error: 'unknown product' });
+    if (store.listDeployments().some(d => d.productId === req.params.id)) return res.status(409).json({ error: 'product has deployments' });
+    store.deleteProduct(req.params.id);
+    res.status(204).end();
+  });
   app.post('/api/fleet/hosts', (req, res) => {
     const { name, ip, sshUser, sshKeyPath } = req.body || {};
     if (!name || !ip || !sshUser) return res.status(400).json({ error: 'name, ip, sshUser required' });

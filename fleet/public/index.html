@@ -187,9 +187,29 @@ function renderFleet(){
   el.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.open));
 }
 function renderProducts(){
-  $('#prodTable').innerHTML=DB.products.length?`<table><thead><tr><th>Product</th><th>Repo</th><th>Default branch</th></tr></thead><tbody>`+
-    DB.products.map(p=>`<tr><td><b>${p.name}</b></td><td class="mono dim">${p.gitUrl}</td><td class="mono">${p.defaultBranch||'main'}</td></tr>`).join('')+`</tbody></table>`
+  $('#prodTable').innerHTML=DB.products.length?`<table><thead><tr><th>Product</th><th>Repo</th><th>Default branch</th><th></th></tr></thead><tbody>`+
+    DB.products.map(p=>`<tr><td><b>${p.name}</b></td><td class="mono dim">${p.gitUrl}</td><td class="mono">${p.defaultBranch||'main'}</td><td><button class="btn ghost small" data-edit-product="${p.id}">Edit</button> <button class="btn ghost small" data-del-product="${p.id}">Delete</button></td></tr>`).join('')+`</tbody></table>`
     :`<div class="empty"><p>No products yet. A product is just a repo — add yours below.</p></div>`;
+  document.querySelectorAll('[data-del-product]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Delete this product?'))return;
+    const r=await fetch('/api/fleet/products/'+b.dataset.delProduct,{method:'DELETE'});
+    r.ok?(toast('Product deleted.'),refresh()):toast('Could not delete: '+((await r.json()).error||'unknown'));
+  });
+  document.querySelectorAll('[data-edit-product]').forEach(b=>b.onclick=()=>editProduct(b.dataset.editProduct));
+}
+async function editProduct(id){
+  const p=DB.products.find(x=>x.id===id);if(!p)return;
+  const row=document.querySelector(`[data-edit-product="${id}"]`).closest('tr');
+  row.innerHTML=`<td><input id="eName" value="${p.name}" size="14"></td><td class="mono dim">${p.gitUrl}</td><td><select id="eBranch"><option>loading branches…</option></select></td><td><button class="btn small" id="eSave">Save</button> <button class="btn ghost small" id="eCancel">Cancel</button></td>`;
+  try{
+    const br=await api.get('/api/fleet/products/'+id+'/branches');
+    $('#eBranch').innerHTML=(br.branches||[]).map(b=>`<option value="${b}"${b===(p.defaultBranch||'main')?' selected':''}>${b}</option>`).join('')||'<option value="">(no branches found)</option>';
+  }catch{ $('#eBranch').innerHTML=`<option value="${p.defaultBranch||'main'}">${p.defaultBranch||'main'} (list failed)</option>`; }
+  $('#eCancel').onclick=renderProducts;
+  $('#eSave').onclick=async()=>{
+    const resp=await fetch('/api/fleet/products/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('#eName').value.trim(),defaultBranch:$('#eBranch').value})});
+    resp.ok?(toast('Product updated.'),refresh()):toast('Could not update.');
+  };
 }
 function renderHosts(){
   const el=$('#hostTable'); if(!el) return;

@@ -53,6 +53,7 @@ function createStore(file) {
     listProducts: () => data.products,
     getProduct: (id) => data.products.find(x => x.id === id),
     saveProduct: (p) => { withBuildDefaults(p); p.id = p.id || newId('p'); data.products = [...data.products.filter(x => x.id !== p.id), p]; persist(); return p; },
+    deleteProduct: (id) => { data.products = data.products.filter(x => x.id !== id); persist(); },
     listHosts: () => data.hosts,
     getHost: (id) => data.hosts.find(x => x.id === id),
     saveHost: (h) => { h.id = h.id || newId('h'); data.hosts = [...data.hosts.filter(x => x.id !== h.id), h]; ensureTargets(); persist(); return h; },

@@ -14,6 +14,7 @@ services:
       - fleet.env
     volumes:
       - fleet-data:/app/data
+      - ./.keys:/app/keys:ro
     restart: unless-stopped
 
 volumes:
