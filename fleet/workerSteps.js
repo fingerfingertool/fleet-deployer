@@ -101,7 +101,11 @@ async function runSteps({ store, deployment, run }, log = () => {}) {
         say(`uploading ${plan.sourceDir || 'public'}/ to ${target.remoteDir}`);
         try {
           await withTimeout((async () => {
-            await client.ensureDir(target.remoteDir);
+            // FTP accounts are typically jailed: absolute remoteDir would
+            // resolve nested inside the jail, so cd into it and use
+            // relative remote names. Docroot must exist (cPanel creates it).
+            try { await client.cd(target.remoteDir); }
+            catch { throw coded('upload-failed', 'remote dir not reachable: ' + target.remoteDir); }
             // upload sourceDir contents (idempotent: re-run overwrites)
             const items = fs.existsSync(sourceDir) ? fs.readdirSync(sourceDir) : [];
             for (const item of items) {
@@ -110,17 +114,17 @@ async function runSteps({ store, deployment, run }, log = () => {}) {
                 return item === pat;
               })) continue;
               const full = path.join(sourceDir, item);
-              if (fs.statSync(full).isDirectory()) await client.uploadFromDir(full, target.remoteDir + '/' + item);
-              else await client.uploadFrom(full, target.remoteDir + '/' + item);
+              if (fs.statSync(full).isDirectory()) await client.uploadFromDir(full, item);
+              else await client.uploadFrom(full, item);
             }
             for (const extra of plan.extraFiles || []) {
               const full = path.join(dir, extra);
-              if (fs.existsSync(full)) await client.uploadFrom(full, target.remoteDir + '/' + path.basename(extra));
+              if (fs.existsSync(full)) await client.uploadFrom(full, path.basename(extra));
             }
             // .fleet-sha marker
             const shaFile = path.join(dir, '.fleet-sha');
             fs.writeFileSync(shaFile, commitSha);
-            await client.uploadFrom(shaFile, target.remoteDir + '/.fleet-sha');
+            await client.uploadFrom(shaFile, '.fleet-sha');
           })(), 600000, 'upload-failed', 'FTP upload timed out');
         } catch (e) {
           throw e.code ? e : coded('upload-failed', 'FTP upload failed: ' + redactSecrets(e.message || ''));
