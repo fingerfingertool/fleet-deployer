@@ -35,3 +35,8 @@ test('binding model: target domain input, no branch/domain inputs on bind form',
   expect(html).not.toMatch('fBranch');
   expect(html).not.toMatch('fDomain');
 });
+test('active tab persists across refresh via localStorage', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('fleet-tab');
+  expect(html).toMatch('localStorage');
+});

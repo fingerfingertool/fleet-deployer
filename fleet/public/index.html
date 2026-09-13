@@ -289,7 +289,9 @@ document.querySelectorAll('.rail button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.rail button').forEach(x=>x.setAttribute('aria-current','false'));
   b.setAttribute('aria-current','true');
   ['fleet','products','targets','propagate'].forEach(t=>$('#tab-'+t).hidden=t!==b.dataset.tab);
+  try{localStorage.setItem('fleet-tab',b.dataset.tab)}catch{}
 });
+try{const last=localStorage.getItem('fleet-tab');if(last&&$('#tab-'+last))document.querySelector(`.rail button[data-tab="${last}"]`).click()}catch{}
 $('#pAdd').onclick=async()=>{const r=await api.post('/api/fleet/products',{name:$('#pName').value.trim(),gitUrl:$('#pGit').value.trim(),defaultBranch:$('#pBranch').value.trim()||'main'});
   r.ok?(toast('Product added.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
 $('#hAdd').onclick=async()=>{const r=await api.post('/api/fleet/hosts',{name:$('#hName').value.trim(),ip:$('#hIp').value.trim(),sshUser:$('#hUser').value.trim()||'root',sshKeyPath:$('#hKey').value.trim()||undefined});
