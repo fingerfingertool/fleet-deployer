@@ -102,7 +102,6 @@ async function runSteps({ store, deployment, run }, log = () => {}) {
         try {
           await withTimeout((async () => {
             await client.ensureDir(target.remoteDir);
-            await client.clearWorkingDir();
             // upload sourceDir contents (idempotent: re-run overwrites)
             const items = fs.existsSync(sourceDir) ? fs.readdirSync(sourceDir) : [];
             for (const item of items) {

@@ -1,4 +1,4 @@
-const { planPublish, redactSecrets } = require('./publish');
+const { redactSecrets } = require('./publish');
 function createWorker(store, opts = {}) {
   const running = new Set();
   const queues = new Map();

@@ -47,7 +47,6 @@ function buildApp(file) {
     for (const d of store.listDeployments().filter(x => x.productId === match.id && x.branch === branch)) {
       if (match.gitUrl && !urls.includes(match.gitUrl) && payload.repository && payload.repository.full_name && !match.gitUrl.includes(payload.repository.full_name)) continue;
       app.locals.worker.queue(d.id, 'webhook').catch(() => {});
-      store.saveRun({ deploymentId: d.id, trigger: 'webhook', branch, status: 'queued' });
       queued.push(d.id);
     }
     res.json({ queued });
@@ -191,7 +190,7 @@ function buildApp(file) {
       if ((d.status === 'queued' || d.status === 'running') && w && typeof w.queueLength === 'function') {
         try {
           const n = w.queueLength(d.targetId || d.vdsId);
-          if (n) return { ...d, queuePosition: n };
+          if (n != null) return { ...d, queuePosition: n };
         } catch {}
       }
       return d;
