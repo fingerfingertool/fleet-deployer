@@ -258,10 +258,15 @@ function buildApp(file) {
   app.locals.store = store;
   app.locals.worker = worker;
   app.post('/api/fleet/deployments/:id/deploy', (req, res) => {
-    const d = store.listDeployments().find(x => x.id === req.params.id);
+    const d = store.getDeployment(req.params.id);
     if (!d) return res.status(404).json({ error: 'unknown deployment' });
     app.locals.worker.queue(d.id, 'manual').catch(() => {});
     res.status(202).json({ queued: true });
+  });
+  app.delete('/api/fleet/deployments/:id', (req, res) => {
+    if (!store.getDeployment(req.params.id)) return res.status(404).json({ error: 'unknown deployment' });
+    store.deleteDeployment(req.params.id);
+    res.status(204).end();
   });
   app.post('/api/fleet/runs/:runId/retry', (req, res) => {
     const r = store.getRun(req.params.runId);

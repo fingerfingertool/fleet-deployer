@@ -93,6 +93,7 @@ input::placeholder{color:var(--faint)}
 <div class="shell">
   <nav class="rail" aria-label="Sections">
     <button data-tab="fleet" aria-current="true">Deployments</button>
+    <button data-tab="bindings" aria-current="false">Bindings</button>
     <button data-tab="products" aria-current="false">Products</button>
     <button data-tab="targets" aria-current="false">Targets</button>
     <button data-tab="propagate" aria-current="false">Hotfix propagate</button>
@@ -103,6 +104,11 @@ input::placeholder{color:var(--faint)}
       <h2>Deployments</h2>
       <p class="sub">Each row is one live clone: a branch of a product, on a host, behind a domain. Open a row to see the go-live checklist.</p>
       <div id="depTable"></div>
+    </section>
+    <section id="tab-bindings" hidden>
+      <h2>Bindings</h2>
+      <p class="sub">Bind a product (repo + branch) to a host (target + domain). One host serves one product.</p>
+      <div id="bindTable"></div>
       <h2 style="margin-top:26px;font-size:18px">Bind product to host</h2>
       <div class="row">
         <select id="fProduct" aria-label="Product"></select>
@@ -167,7 +173,7 @@ async function refresh(){
   [DB.products,DB.hosts,DB.targets,DB.deps]=await Promise.all([api.get('/api/fleet/products'),api.get('/api/fleet/hosts'),api.get('/api/fleet/targets'),api.get('/api/fleet/deployments')]);
   $('#tLive').textContent=DB.deps.filter(d=>d.status==='live').length;
   $('#tShips').textContent=DB.deps.length; $('#tHosts').textContent=DB.targets.length;
-  renderFleet();renderProducts();renderHosts();renderTargets();
+  renderFleet();renderBindings();renderProducts();renderHosts();renderTargets();
   $('#fProduct').innerHTML=DB.products.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')||'<option value="">— add a product first —</option>';
   $('#targetPicker').innerHTML=DB.targets.map(t=>`<option value="${t.id}">${t.name} · ${t.kind}</option>`).join('')||'<option value="">— add a target first —</option>';
   const fh=$('#fHost'); if(fh) fh.innerHTML=DB.hosts.map(h=>`<option value="${h.id}">${h.name} · ${h.ip}</option>`).join('')||'<option value="">— add a host first —</option>';
@@ -187,6 +193,18 @@ function renderFleet(){
   el.querySelectorAll('[data-deploy]').forEach(b=>b.onclick=async()=>{
     const r=await fetch('/api/fleet/deployments/'+b.dataset.deploy+'/deploy',{method:'POST'});
     r.ok?(toast('Deploy queued.'),refresh()):toast('Could not queue.');
+  });
+}
+function renderBindings(){
+  const el=$('#bindTable'); if(!el) return;
+  if(!DB.deps.length){el.innerHTML=`<div class="empty"><p>No bindings yet. Pick a product and a host below.</p></div>`;return}
+  el.innerHTML=`<table><thead><tr><th>Product</th><th>Branch</th><th>Host</th><th>Domain</th><th></th></tr></thead><tbody>`+
+    DB.deps.map(d=>{const p=DB.products.find(x=>x.id===d.productId),t=DB.targets.find(x=>x.id===(d.targetId||d.vdsId));
+    return `<tr><td><b>${p?p.name:'?'}</b></td><td class="mono">${d.branch||''}</td><td>${t?t.name:''}</td><td class="mono">${d.domain||''}</td><td><button class="btn ghost small" data-unbind="${d.id}">Unbind</button></td></tr>`}).join('')+`</tbody></table>`;
+  el.querySelectorAll('[data-unbind]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Unbind (delete this binding)? Run history is kept.'))return;
+    const r=await fetch('/api/fleet/deployments/'+b.dataset.unbind,{method:'DELETE'});
+    r.ok?(toast('Unbound.'),refresh()):toast('Could not unbind.');
   });
 }
 function renderProducts(){
@@ -288,7 +306,7 @@ $('#scrim').onclick=closeDrawer;
 document.querySelectorAll('.rail button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.rail button').forEach(x=>x.setAttribute('aria-current','false'));
   b.setAttribute('aria-current','true');
-  ['fleet','products','targets','propagate'].forEach(t=>$('#tab-'+t).hidden=t!==b.dataset.tab);
+  ['fleet','bindings','products','targets','propagate'].forEach(t=>$('#tab-'+t).hidden=t!==b.dataset.tab);
   try{localStorage.setItem('fleet-tab',b.dataset.tab)}catch{}
 });
 try{const last=localStorage.getItem('fleet-tab');if(last&&$('#tab-'+last))document.querySelector(`.rail button[data-tab="${last}"]`).click()}catch{}

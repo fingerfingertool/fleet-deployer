@@ -40,3 +40,9 @@ test('active tab persists across refresh via localStorage', () => {
   expect(html).toMatch('fleet-tab');
   expect(html).toMatch('localStorage');
 });
+test('bindings is a separate screen with unbind', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('data-tab="bindings"');
+  expect(html).toMatch('tab-bindings');
+  expect(html).toMatch('data-unbind');
+});

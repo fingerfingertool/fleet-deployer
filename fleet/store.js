@@ -77,6 +77,8 @@ function createStore(file) {
     deleteTarget: (id) => { data.targets = data.targets.filter(x => x.id !== id); persist(); },
     migrateHostsToTargets: () => { ensureTargets(); persist(); return data.targets; },
     listDeployments: () => data.deployments,
+    getDeployment: (id) => data.deployments.find(x => x.id === id),
+    deleteDeployment: (id) => { data.deployments = data.deployments.filter(x => x.id !== id); persist(); },
     saveDeployment: (d) => { d.id = d.id || newId('d'); data.deployments = [...data.deployments.filter(x => x.id !== d.id), d]; persist(); return d; },
     listRuns: () => data.runs,
     getRun: (id) => data.runs.find(x => x.id === id),

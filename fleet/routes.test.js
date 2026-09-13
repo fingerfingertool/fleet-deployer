@@ -83,3 +83,12 @@ test('target requires domain', async () => {
   const r = await request(app).post('/api/fleet/targets').send({ name: 'x', kind: 'vds', ip: '1.2.3.4', sshUser: 'root' });
   expect(r.status).toBe(400);
 });
+test('unbind deployment via DELETE, history kept', async () => {
+  const app = buildApp(':memory:');
+  const p = (await request(app).post('/api/fleet/products').send({ name: 's', gitUrl: 'https://x/y.git' })).body;
+  const t = (await request(app).post('/api/fleet/targets').send({ name: 'v1', kind: 'vds', ip: '1.2.3.4', sshUser: 'root', domain: 'a.example.com' })).body;
+  const d = (await request(app).post('/api/fleet/deployments').send({ productId: p.id, targetId: t.id })).body;
+  expect((await request(app).delete('/api/fleet/deployments/' + d.id)).status).toBe(204);
+  expect((await request(app).delete('/api/fleet/deployments/' + d.id)).status).toBe(404);
+  expect((await request(app).get('/api/fleet/deployments')).body.length).toBe(0);
+});
