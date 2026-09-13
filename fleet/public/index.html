@@ -224,8 +224,9 @@ async function editProduct(id){
   row.innerHTML=`<td><input id="eName" value="${p.name}" size="14"></td><td class="mono dim">${p.gitUrl}</td><td><select id="eBranch"><option>loading branches…</option></select><br><input id="eHook" placeholder="webhookSecretRef (ENV NAME)" value="${p.webhookSecretRef||''}" size="26" style="margin-top:6px"></td><td><button class="btn small" id="eSave">Save</button> <button class="btn ghost small" id="eCancel">Cancel</button></td>`;
   try{
     const br=await api.get('/api/fleet/products/'+id+'/branches');
+    if(br.error) throw new Error(br.error);
     $('#eBranch').innerHTML=(br.branches||[]).map(b=>`<option value="${b}"${b===(p.defaultBranch||'main')?' selected':''}>${b}</option>`).join('')||'<option value="">(no branches found)</option>';
-  }catch{ $('#eBranch').innerHTML=`<option value="${p.defaultBranch||'main'}">${p.defaultBranch||'main'} (list failed)</option>`; }
+  }catch(e){ $('#eBranch').innerHTML=`<option value="${p.defaultBranch||'main'}">${p.defaultBranch||'main'} (list failed: ${(e&&e.message)||'unknown'})</option>`; }
   $('#eCancel').onclick=renderProducts;
   $('#eSave').onclick=async()=>{
     const resp=await fetch('/api/fleet/products/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('#eName').value.trim(),defaultBranch:$('#eBranch').value,webhookSecretRef:$('#eHook').value.trim()||undefined})});
