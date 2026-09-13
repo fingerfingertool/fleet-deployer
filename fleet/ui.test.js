@@ -16,6 +16,13 @@ test('targets table has delete buttons and clickable site links', () => {
   expect(html).toMatch('data-del-target');
   expect(html).toMatch('target="_blank"');
 });
+test('deploy buttons, history and retry wiring present', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('data-deploy');
+  expect(html).toMatch('data-retry');
+  expect(html).toMatch('/deploy');
+  expect(html).toMatch('webhookSecretRef');
+});
 test('products table has edit/delete and branch select wiring', () => {
   const html = fs.readFileSync('fleet/public/index.html', 'utf8');
   expect(html).toMatch('data-edit-product');

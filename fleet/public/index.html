@@ -183,8 +183,12 @@ function renderFleet(){
       <td><b>${p?p.name:'?'}</b> <span class="mono dim">${d.branch||''}</span></td>
       <td class="mono"><a href="https://${d.domain||''}" target="_blank" rel="noopener">${d.domain||''}</a><br><span class="dim">${h?h.name+' · '+h.ip:''}</span></td>
       <td class="mono dim">${d.currentCommit?d.currentCommit.slice(0,8):'— not shipped —'}</td>
-      <td><button class="btn ghost small" data-open="${d.id}">Open</button></td></tr>`}).join('')+`</tbody></table>`;
+      <td><button class="btn ghost small" data-open="${d.id}">Open</button> <button class="btn small" data-deploy="${d.id}">Deploy</button>${d.status==='queued'||d.status==='running'?` <span class="mono dim">q${d.queuePosition!=null?'#'+d.queuePosition:''}</span>`:''}</td></tr>`}).join('')+`</tbody></table>`;
   el.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.open));
+  el.querySelectorAll('[data-deploy]').forEach(b=>b.onclick=async()=>{
+    const r=await fetch('/api/fleet/deployments/'+b.dataset.deploy+'/deploy',{method:'POST'});
+    r.ok?(toast('Deploy queued.'),refresh()):toast('Could not queue.');
+  });
 }
 function renderProducts(){
   $('#prodTable').innerHTML=DB.products.length?`<table><thead><tr><th>Product</th><th>Repo</th><th>Default branch</th><th></th></tr></thead><tbody>`+
@@ -200,14 +204,14 @@ function renderProducts(){
 async function editProduct(id){
   const p=DB.products.find(x=>x.id===id);if(!p)return;
   const row=document.querySelector(`[data-edit-product="${id}"]`).closest('tr');
-  row.innerHTML=`<td><input id="eName" value="${p.name}" size="14"></td><td class="mono dim">${p.gitUrl}</td><td><select id="eBranch"><option>loading branches…</option></select></td><td><button class="btn small" id="eSave">Save</button> <button class="btn ghost small" id="eCancel">Cancel</button></td>`;
+  row.innerHTML=`<td><input id="eName" value="${p.name}" size="14"></td><td class="mono dim">${p.gitUrl}</td><td><select id="eBranch"><option>loading branches…</option></select><br><input id="eHook" placeholder="webhookSecretRef (ENV NAME)" value="${p.webhookSecretRef||''}" size="26" style="margin-top:6px"></td><td><button class="btn small" id="eSave">Save</button> <button class="btn ghost small" id="eCancel">Cancel</button></td>`;
   try{
     const br=await api.get('/api/fleet/products/'+id+'/branches');
     $('#eBranch').innerHTML=(br.branches||[]).map(b=>`<option value="${b}"${b===(p.defaultBranch||'main')?' selected':''}>${b}</option>`).join('')||'<option value="">(no branches found)</option>';
   }catch{ $('#eBranch').innerHTML=`<option value="${p.defaultBranch||'main'}">${p.defaultBranch||'main'} (list failed)</option>`; }
   $('#eCancel').onclick=renderProducts;
   $('#eSave').onclick=async()=>{
-    const resp=await fetch('/api/fleet/products/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('#eName').value.trim(),defaultBranch:$('#eBranch').value})});
+    const resp=await fetch('/api/fleet/products/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('#eName').value.trim(),defaultBranch:$('#eBranch').value,webhookSecretRef:$('#eHook').value.trim()||undefined})});
     resp.ok?(toast('Product updated.'),refresh()):toast('Could not update.');
   };
 }
@@ -255,6 +259,10 @@ function checklistFor(kind,d,h){
       <li><b>4 · Verify</b>Health check must answer before the beacon turns green.</li>
     </ol>`;
 }
+async function renderHistory(deploymentId){
+  const runs=await api.get('/api/fleet/deployments/'+deploymentId+'/runs');
+  return runs.map(r=>`<div class="mono">${r.startedAt||''} · ${r.trigger||''} · ${r.status}${r.reason?' · '+r.reason:''}${r.status==='failed'?` <button class="btn ghost small" data-retry="${r.id}">Retry</button>`:''}</div>`).join('')||'<p class="dim">No runs yet.</p>';
+}
 function openDrawer(id){
   const d=DB.deps.find(x=>x.id===id);if(!d)return;
   const p=DB.products.find(x=>x.id===d.productId),h=DB.hosts.find(x=>x.id===(d.vdsId||d.targetId)),t=DB.targets.find(x=>x.id===(d.targetId||d.vdsId));
@@ -262,13 +270,19 @@ function openDrawer(id){
   $('#drawer').innerHTML=`<h3>${d.domain||'Untitled clone'}</h3>
     <p class="dim mono">${p?p.name:''} · ${d.branch||''} → ${h?h.name+' ('+h.ip+')':''}</p>
     <p><span class="beacon ${beacon(d.status)}"></span><span class="mono">${d.status||'draft'}</span>
-    <span class="dim mono"> · ${d.currentCommit?d.currentCommit.slice(0,12):'no commit yet'}</span></p>
+    <span class="dim mono"> · ${d.currentCommit?d.currentCommit.slice(0,12):'no commit yet'}</span>${d.status==='queued'||d.status==='running'?`<span class="dim mono"> · queue${d.queuePosition!=null?' #'+d.queuePosition:''}</span>`:''}</p>
     ${checklistFor(kind,d,h)}
-    <div class="row"><button class="btn" disabled title="Wires to the deploy queue in the next wave">Deploy</button>
-    <button class="btn ghost" id="dClose">Close</button></div>
-    <p class="dim" style="font-size:13px">Deploy execution, redeploy and rollback arrive with the SSH worker. This board already tracks what should live where.</p>`;
+    <h4 style="margin:14px 0 6px">Run history</h4>
+    <div id="runHist"><p class="dim">Loading…</p></div>
+    <div class="row"><button class="btn" data-deploy="${d.id}">Deploy</button>
+    <button class="btn ghost" id="dClose">Close</button></div>`;
   $('#drawer').classList.add('open');$('#scrim').classList.add('open');
   $('#dClose').onclick=closeDrawer;
+  $('#drawer').querySelector('[data-deploy]').onclick=async()=>{
+    const r=await fetch('/api/fleet/deployments/'+d.id+'/deploy',{method:'POST'});
+    r.ok?(toast('Deploy queued.'),refresh()):toast('Could not queue.');
+  };
+  renderHistory(d.id).then(h=>{const el=$('#runHist');if(el)el.innerHTML=h;});
 }
 function closeDrawer(){$('#drawer').classList.remove('open');$('#scrim').classList.remove('open')}
 $('#scrim').onclick=closeDrawer;
@@ -293,6 +307,11 @@ $('#gPlan').onclick=()=>{const head=$('#gHead').value.trim();if(!head){toast('En
     rows.map(({d,behind})=>`<tr><td class="mono">${d.domain||d.id} <span class="dim">${d.currentCommit?d.currentCommit.slice(0,8):'—'}</span></td>
     <td>${behind?'<span class="beacon b-queued"></span>behind — merge origin into '+d.branch+' in git, then redeploy':'<span class="beacon b-live"></span>on HEAD'}</td></tr>`).join('')+`</tbody></table>`;};
 refresh();
+document.addEventListener('click',async e=>{
+  const b=e.target.closest&&e.target.closest('[data-retry]');if(!b)return;
+  const r=await fetch('/api/fleet/runs/'+b.dataset.retry+'/retry',{method:'POST'});
+  r.ok?(toast('Retry queued.'),refresh()):toast('Could not retry.');
+});
 document.addEventListener('change',e=>{if(e.target&&e.target.id==='targetPicker')updateTargetFields()});
 </script>
 </body>
