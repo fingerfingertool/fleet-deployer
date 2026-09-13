@@ -92,3 +92,21 @@ test('unbind deployment via DELETE, history kept', async () => {
   expect((await request(app).delete('/api/fleet/deployments/' + d.id)).status).toBe(404);
   expect((await request(app).get('/api/fleet/deployments')).body.length).toBe(0);
 });
+test('edit binding product via PUT, unknown rejected', async () => {
+  const app = buildApp(':memory:');
+  const p1 = (await request(app).post('/api/fleet/products').send({ name: 'a', gitUrl: 'https://x/y.git', defaultBranch: 'main' })).body;
+  const p2 = (await request(app).post('/api/fleet/products').send({ name: 'b', gitUrl: 'https://x/y.git', defaultBranch: 'dev' })).body;
+  const t = (await request(app).post('/api/fleet/targets').send({ name: 'v1', kind: 'vds', ip: '1.2.3.4', sshUser: 'root', domain: 'a.example.com' })).body;
+  const d = (await request(app).post('/api/fleet/deployments').send({ productId: p1.id, targetId: t.id })).body;
+  const u = await request(app).put('/api/fleet/deployments/' + d.id).send({ productId: p2.id });
+  expect(u.status).toBe(200);
+  expect(u.body.productId).toBe(p2.id);
+  expect(u.body.branch).toBe('dev');
+  expect(u.body.domain).toBe('a.example.com');
+  expect((await request(app).put('/api/fleet/deployments/' + d.id).send({ productId: 'nope' })).status).toBe(400);
+  expect((await request(app).put('/api/fleet/deployments/nope').send({ productId: p1.id })).status).toBe(404);
+});
+test('runs list newest first', async () => {
+  const app = buildApp(':memory:');
+  expect((await request(app).get('/api/fleet/runs')).body).toEqual([]);
+});

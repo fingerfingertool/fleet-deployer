@@ -256,6 +256,20 @@ function buildApp(file) {
     if (!r) return res.status(404).json({ error: 'unknown run' });
     res.json(r);
   });
+  app.get('/api/fleet/runs', (req, res) => {
+    res.json(store.listRuns().slice().sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || '')));
+  });
+  app.put('/api/fleet/deployments/:id', (req, res) => {
+    const d = store.getDeployment(req.params.id);
+    if (!d) return res.status(404).json({ error: 'unknown deployment' });
+    if (req.body.productId !== undefined) {
+      const p = store.getProduct(req.body.productId);
+      if (!p) return res.status(400).json({ error: 'unknown productId' });
+      d.productId = p.id;
+      d.branch = p.defaultBranch || 'main';
+    }
+    res.json(store.saveDeployment(d));
+  });
   app.get('/api/fleet/products', (req, res) => res.json(store.listProducts()));
   app.get('/api/fleet/hosts', (req, res) => res.json(store.listHosts()));
   const worker = createWorker(store);

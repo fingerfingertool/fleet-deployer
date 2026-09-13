@@ -102,7 +102,7 @@ input::placeholder{color:var(--faint)}
   <main>
     <section id="tab-fleet">
       <h2>Deployments</h2>
-      <p class="sub">Each row is one live clone: a branch of a product, on a host, behind a domain. Open a row to see the go-live checklist.</p>
+      <p class="sub">History of every deploy across all bindings, newest first. Bindings live on the Bindings screen.</p>
       <div id="depTable"></div>
     </section>
     <section id="tab-bindings" hidden>
@@ -167,11 +167,11 @@ const $=s=>document.querySelector(s), api={
   get:p=>fetch(p).then(r=>r.json()),
   post:(p,b)=>fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(async r=>({ok:r.ok,body:await r.json()}))
 };
-let DB={products:[],hosts:[],targets:[],deps:[]};
+let DB={products:[],hosts:[],targets:[],deps:[],runs:[]};
 const beacon=s=>({live:'b-live',draft:'b-draft',failed:'b-failed',drifted:'b-drifted',running:'b-running',queued:'b-queued'}[s]||'b-draft');
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',3200)}
 async function refresh(){
-  [DB.products,DB.hosts,DB.targets,DB.deps]=await Promise.all([api.get('/api/fleet/products'),api.get('/api/fleet/hosts'),api.get('/api/fleet/targets'),api.get('/api/fleet/deployments')]);
+  [DB.products,DB.hosts,DB.targets,DB.deps,DB.runs]=await Promise.all([api.get('/api/fleet/products'),api.get('/api/fleet/hosts'),api.get('/api/fleet/targets'),api.get('/api/fleet/deployments'),api.get('/api/fleet/runs')]);
   $('#tLive').textContent=DB.deps.filter(d=>d.status==='live').length;
   $('#tShips').textContent=DB.deps.length; $('#tHosts').textContent=DB.targets.length;
   renderFleet();renderBindings();renderProducts();renderHosts();renderTargets();
@@ -182,18 +182,20 @@ async function refresh(){
 }
 function renderFleet(){
   const el=$('#depTable');
-  if(!DB.deps.length){el.innerHTML=`<div class="empty"><p>No clones yet. Fill the form below — product, branch, host, domain — and ship your first one.</p></div>`;return}
-  el.innerHTML=`<table><thead><tr><th>Status</th><th>Clone</th><th>Route</th><th>Commit</th><th></th></tr></thead><tbody>`+
-    DB.deps.map(d=>{const p=DB.products.find(x=>x.id===d.productId),h=DB.hosts.find(x=>x.id===d.vdsId);
-      return `<tr><td><span class="beacon ${beacon(d.status)}"></span><span class="mono">${d.status||'draft'}</span></td>
-      <td><b>${p?p.name:'?'}</b> <span class="mono dim">${d.branch||''}</span></td>
-      <td class="mono"><a href="https://${d.domain||''}" target="_blank" rel="noopener">${d.domain||''}</a><br><span class="dim">${h?h.name+' · '+h.ip:''}</span></td>
-      <td class="mono dim">${d.currentCommit?d.currentCommit.slice(0,8):'— not shipped —'}</td>
-      <td><button class="btn ghost small" data-open="${d.id}">Open</button> <button class="btn small" data-deploy="${d.id}">Deploy</button>${d.status==='queued'||d.status==='running'?` <span class="mono dim">q${d.queuePosition!=null?'#'+d.queuePosition:''}</span>`:''}</td></tr>`}).join('')+`</tbody></table>`;
+  if(!DB.runs.length){el.innerHTML=`<div class="empty"><p>No deploys yet. Queue one from a binding.</p></div>`;return}
+  el.innerHTML=`<table><thead><tr><th>Status</th><th>When</th><th>Product</th><th>Host</th><th>Trigger</th><th>Commit</th><th></th></tr></thead><tbody>`+
+    DB.runs.map(r=>{const d=DB.deps.find(x=>x.id===r.deploymentId);const p=d&&DB.products.find(x=>x.id===d.productId);const t=d&&DB.targets.find(x=>x.id===(d.targetId||d.vdsId));
+      return `<tr><td><span class="beacon ${beacon(r.status)}"></span><span class="mono">${r.status}${r.reason?' · '+r.reason:''}</span></td>
+      <td class="mono dim">${(r.startedAt||'').slice(0,16).replace('T',' ')}</td>
+      <td><b>${p?p.name:'?'}</b> <span class="mono dim">${r.branch||''}</span></td>
+      <td class="mono">${t?t.name:''}${d&&d.domain?`<br><a href="https://${d.domain}" target="_blank" rel="noopener">${d.domain}</a>`:''}</td>
+      <td class="mono dim">${r.trigger||''}</td>
+      <td class="mono dim">${r.commitSha?r.commitSha.slice(0,8):'—'}</td>
+      <td>${d?`<button class="btn ghost small" data-open="${d.id}">Open</button>`:''}${r.status==='failed'?` <button class="btn small" data-retry="${r.id}">Retry</button>`:''}</td></tr>`}).join('')+`</tbody></table>`;
   el.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.open));
-  el.querySelectorAll('[data-deploy]').forEach(b=>b.onclick=async()=>{
-    const r=await fetch('/api/fleet/deployments/'+b.dataset.deploy+'/deploy',{method:'POST'});
-    r.ok?(toast('Deploy queued.'),refresh()):toast('Could not queue.');
+  el.querySelectorAll('[data-retry]').forEach(b=>b.onclick=async()=>{
+    const r=await fetch('/api/fleet/runs/'+b.dataset.retry+'/retry',{method:'POST'});
+    r.ok?(toast('Retry queued.'),refresh()):toast('Could not retry.');
   });
 }
 function renderBindings(){
@@ -201,7 +203,21 @@ function renderBindings(){
   if(!DB.deps.length){el.innerHTML=`<div class="empty"><p>No bindings yet. Pick a product and a host below.</p></div>`;return}
   el.innerHTML=`<table><thead><tr><th>Product</th><th>Branch</th><th>Host</th><th>Domain</th><th></th></tr></thead><tbody>`+
     DB.deps.map(d=>{const p=DB.products.find(x=>x.id===d.productId),t=DB.targets.find(x=>x.id===(d.targetId||d.vdsId));
-    return `<tr><td><b>${p?p.name:'?'}</b></td><td class="mono">${d.branch||''}</td><td>${t?t.name:''}</td><td class="mono">${d.domain||''}</td><td><button class="btn ghost small" data-unbind="${d.id}">Unbind</button></td></tr>`}).join('')+`</tbody></table>`;
+    return `<tr><td><b>${p?p.name:'?'}</b></td><td class="mono">${d.branch||''}</td><td>${t?t.name:''}</td><td class="mono">${d.domain||''}</td><td><button class="btn ghost small" data-edit-bind="${d.id}">Edit</button> <button class="btn small" data-deploy="${d.id}">Deploy</button> <button class="btn ghost small" data-unbind="${d.id}">Unbind</button></td></tr>`}).join('')+`</tbody></table>`;
+  el.querySelectorAll('[data-deploy]').forEach(b=>b.onclick=async()=>{
+    const r=await fetch('/api/fleet/deployments/'+b.dataset.deploy+'/deploy',{method:'POST'});
+    r.ok?(toast('Deploy queued — see Deployments.'),refresh()):toast('Could not queue.');
+  });
+  el.querySelectorAll('[data-edit-bind]').forEach(b=>b.onclick=()=>{
+    const d=DB.deps.find(x=>x.id===b.dataset.editBind);if(!d)return;
+    const row=b.closest('tr');
+    row.cells[0].innerHTML=`<select id="eProd">${DB.products.map(p=>`<option value="${p.id}"${p.id===d.productId?' selected':''}>${p.name} · ${p.defaultBranch||'main'}</option>`).join('')}</select>`;
+    b.outerHTML=`<button class="btn small" id="eBindSave">Save</button>`;
+    $('#eBindSave').onclick=async()=>{
+      const r=await fetch('/api/fleet/deployments/'+d.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({productId:$('#eProd').value})});
+      r.ok?(toast('Binding updated.'),refresh()):toast('Could not update: '+((await r.json()).error||'unknown'));
+    };
+  });
   el.querySelectorAll('[data-unbind]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Unbind (delete this binding)? Run history is kept.'))return;
     const r=await fetch('/api/fleet/deployments/'+b.dataset.unbind,{method:'DELETE'});

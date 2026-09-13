@@ -50,3 +50,9 @@ test('add-product row has repo key path input', () => {
   const html = fs.readFileSync('fleet/public/index.html', 'utf8');
   expect(html).toMatch('pKey');
 });
+test('deployments is global history, bindings have edit+deploy', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('data-edit-bind');
+  expect(html).toMatch('/api/fleet/runs');
+  expect(html).toMatch('eBindSave');
+});
