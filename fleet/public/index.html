@@ -192,7 +192,8 @@ function renderProducts(){
     :`<div class="empty"><p>No products yet. A product is just a repo — add yours below.</p></div>`;
 }
 function renderHosts(){
-  $('#hostTable').innerHTML=DB.hosts.length?`<table><thead><tr><th>Host</th><th>IP</th><th>SSH</th></tr></thead><tbody>`+
+  const el=$('#hostTable'); if(!el) return;
+  el.innerHTML=DB.hosts.length?`<table><thead><tr><th>Host</th><th>IP</th><th>SSH</th></tr></thead><tbody>`+
     DB.hosts.map(h=>`<tr><td><b>${h.name}</b></td><td class="mono">${h.ip}</td><td class="mono dim">${h.sshUser}${h.sshKeyPath?' · key path set':''}</td></tr>`).join('')+`</tbody></table>`
     :`<div class="empty"><p>No hosts yet. Any VDS works — add its IP below.</p></div>`;
 }
