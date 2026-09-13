@@ -1,5 +1,5 @@
 FROM node:22-alpine
-RUN apk add --no-cache git openssh-client
+RUN apk add --no-cache git openssh-client python3
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --omit=dev
