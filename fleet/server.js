@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const { createStore } = require('./store');
 const { createWorker } = require('./worker');
 const ALLOWED_KINDS = ['vds', 'static-sftp'];
@@ -21,8 +22,36 @@ function basicAuth(req, res, next) {
 function buildApp(file) {
   const store = createStore(file || 'fleet.json');
   const app = express();
+  app.use('/api/fleet/webhooks/github', express.raw({ type: 'application/json' }));
   app.use(express.json());
   app.get('/api/fleet/health', (req, res) => res.json({ ok: true }));
+  app.post('/api/fleet/webhooks/github', (req, res) => {
+    const event = req.headers['x-github-event'];
+    if (event === 'ping') return res.json({ ok: true });
+    if (event !== 'push') return res.json({ ignored: true });
+    const raw = req.body; // Buffer from express.raw
+    const products = store.listProducts();
+    const match = products.find(p => {
+      const ref = p.webhookSecretRef && process.env[p.webhookSecretRef];
+      if (!ref) return false;
+      const sig = crypto.createHmac('sha256', ref).update(raw).digest('hex');
+      const got = (req.headers['x-hub-signature-256'] || '').replace('sha256=', '');
+      try { return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(got)); }
+      catch { return false; }
+    });
+    if (!match) return res.status(401).json({ error: 'bad signature' });
+    let payload; try { payload = JSON.parse(raw.toString('utf8')); } catch { return res.status(400).json({ error: 'bad payload' }); }
+    const branch = (payload.ref || '').replace('refs/heads/', '');
+    const urls = [payload.repository && payload.repository.clone_url, payload.repository && payload.repository.ssh_url].filter(Boolean);
+    const queued = [];
+    for (const d of store.listDeployments().filter(x => x.productId === match.id && x.branch === branch)) {
+      if (match.gitUrl && !urls.includes(match.gitUrl) && payload.repository && payload.repository.full_name && !match.gitUrl.includes(payload.repository.full_name)) continue;
+      app.locals.worker.queue(d.id, 'webhook').catch(() => {});
+      store.saveRun({ deploymentId: d.id, trigger: 'webhook', branch, status: 'queued' });
+      queued.push(d.id);
+    }
+    res.json({ queued });
+  });
   app.use('/api/fleet', basicAuth);
   app.post('/api/fleet/products', (req, res) => {
     const { name, gitUrl, defaultBranch, buildConfig } = req.body || {};
@@ -57,7 +86,7 @@ function buildApp(file) {
   app.put('/api/fleet/products/:id', (req, res) => {
     const p = store.getProduct(req.params.id);
     if (!p) return res.status(404).json({ error: 'unknown product' });
-    const { name, gitUrl, defaultBranch, buildConfig, repoKeyPath } = req.body || {};
+    const { name, gitUrl, defaultBranch, buildConfig, repoKeyPath, webhookSecretRef } = req.body || {};
     if (name !== undefined) p.name = name;
     if (gitUrl !== undefined) p.gitUrl = gitUrl;
     if (defaultBranch !== undefined) p.defaultBranch = defaultBranch || 'main';
@@ -76,6 +105,10 @@ function buildApp(file) {
     if (repoKeyPath !== undefined) {
       if (repoKeyPath !== null && (typeof repoKeyPath !== 'string' || repoKeyPath.length > 512)) return res.status(400).json({ error: 'repoKeyPath must be a path of max 512 chars' });
       if (repoKeyPath) p.repoKeyPath = repoKeyPath; else delete p.repoKeyPath;
+    }
+    if (webhookSecretRef !== undefined) {
+      if (typeof webhookSecretRef !== 'string' || webhookSecretRef.length > 128 || !/^[A-Z0-9_]+$/.test(webhookSecretRef)) return res.status(400).json({ error: 'invalid webhookSecretRef' });
+      p.webhookSecretRef = webhookSecretRef;
     }
     const { privateKey, sshKey, password, keyMaterial, ...rest } = p;
     res.json(store.saveProduct(rest));
