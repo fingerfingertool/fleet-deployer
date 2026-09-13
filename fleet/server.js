@@ -44,7 +44,7 @@ function buildApp(file) {
     const branch = (payload.ref || '').replace('refs/heads/', '');
     const urls = [payload.repository && payload.repository.clone_url, payload.repository && payload.repository.ssh_url].filter(Boolean);
     const queued = [];
-    for (const d of store.listDeployments().filter(x => x.productId === match.id && x.branch === branch)) {
+    for (const d of store.listDeployments().filter(x => x.productId === match.id && (match.defaultBranch || 'main') === branch)) {
       if (match.gitUrl && !urls.includes(match.gitUrl) && payload.repository && payload.repository.full_name && !match.gitUrl.includes(payload.repository.full_name)) continue;
       app.locals.worker.queue(d.id, 'webhook').catch(() => {});
       queued.push(d.id);
@@ -146,10 +146,15 @@ function buildApp(file) {
     // Explicitly strip sshKey / privateKey even if present in body — never saved
     res.status(201).json(store.saveHost(host));
   });
+  function validateDomain(v) {
+    if (typeof v !== 'string' || v.length === 0 || v.length > 253) return false;
+    return v.split('.').every((l) => /^(?!-)[A-Za-z0-9-]{1,63}(?<!-)$/.test(l));
+  }
   function validateTarget(body) {
     const { kind } = body || {};
     if (!ALLOWED_KINDS.includes(kind)) return 'kind must be one of vds, static-sftp';
     if (!body.name) return 'name required';
+    if (!validateDomain(body.domain)) return 'valid domain required (one target serves one domain)';
     if (kind === 'vds') {
       if (!body.ip || !body.sshUser) return 'vds requires name, ip, sshUser';
     } else {
@@ -177,19 +182,48 @@ function buildApp(file) {
     }
   });
   app.delete('/api/fleet/targets/:id', (req, res) => {
+    if (store.listDeployments().some(d => (d.targetId || d.vdsId) === req.params.id)) return res.status(409).json({ error: 'target has deployments' });
     store.deleteTarget(req.params.id);
     res.status(204).end();
   });
+  app.put('/api/fleet/targets/:id', (req, res) => {
+    const t = store.getTarget(req.params.id);
+    if (!t) return res.status(404).json({ error: 'unknown target' });
+    const { name, domain, ip, sshUser, sshKeyPath, host, username, remoteDir, providerLabel } = req.body || {};
+    if (name !== undefined) t.name = name;
+    if (domain !== undefined) {
+      if (!validateDomain(domain)) return res.status(400).json({ error: 'invalid domain' });
+      t.domain = domain;
+    }
+    for (const f of ['ip', 'sshUser', 'host', 'username', 'remoteDir', 'providerLabel']) {
+      if (req.body[f] !== undefined) t[f] = req.body[f];
+    }
+    if (sshKeyPath !== undefined) {
+      if (typeof sshKeyPath !== 'string' || sshKeyPath.length > 512) return res.status(400).json({ error: 'sshKeyPath must be a string of max 512 chars' });
+      t.sshKeyPath = sshKeyPath;
+    }
+    const { privateKey, sshKey, password, keyMaterial, ...rest } = t;
+    try {
+      res.json(store.saveTarget(rest));
+    } catch (e) {
+      res.status(400).json({ error: e.message });
+    }
+  });
   app.post('/api/fleet/deployments', (req, res) => {
-    const { productId, branch, vdsId, targetId, domain, envValues } = req.body || {};
+    const { productId, vdsId, targetId, envValues } = req.body || {};
     const tid = targetId || vdsId;
-    if (!productId || !branch || !tid || !domain) return res.status(400).json({ error: 'productId, branch, targetId (or vdsId), domain required' });
+    if (!productId || !tid) return res.status(400).json({ error: 'productId and targetId required' });
     // FK checks
-    if (!store.getProduct(productId)) return res.status(400).json({ error: 'unknown productId' });
-    if (!(store.getTarget(tid) || store.getHost(tid))) return res.status(400).json({ error: 'unknown target' });
-    // Mass-assignment guard: whitelist fields, force status/currentCommit
+    const product = store.getProduct(productId);
+    if (!product) return res.status(400).json({ error: 'unknown productId' });
+    const target = store.getTarget(tid) || store.getHost(tid);
+    if (!target) return res.status(400).json({ error: 'unknown target' });
+    if (!target.domain) return res.status(400).json({ error: 'target has no domain' });
+    // 1:1 binding: one target serves one product
+    if (store.listDeployments().some(d => (d.targetId || d.vdsId) === tid)) return res.status(409).json({ error: 'target already bound' });
+    // Product is repo+branch; binding inherits both plus the target domain
     const deployment = {
-      productId, branch, targetId: tid, vdsId: tid, domain,
+      productId, branch: product.defaultBranch || 'main', targetId: tid, vdsId: tid, domain: target.domain,
       envValues: (envValues && typeof envValues === 'object') ? envValues : {},
       status: 'draft',
       currentCommit: null,

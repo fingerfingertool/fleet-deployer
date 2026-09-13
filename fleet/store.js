@@ -49,6 +49,12 @@ function createStore(file) {
   }
   for (const p of data.products) withBuildDefaults(p);
   ensureTargets();
+  // Backfill: one target serves one domain — inherit from existing bindings
+  for (const d of data.deployments) {
+    const t = data.targets.find(x => x.id === (d.targetId || d.vdsId));
+    if (t && !t.domain && d.domain) t.domain = d.domain;
+  }
+  persist();
   function persist() { if (file !== ':memory:') fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
   return {
     listProducts: () => data.products,

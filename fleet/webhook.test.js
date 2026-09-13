@@ -9,8 +9,8 @@ test('push matching repo+branch queues deploys', async () => {
   const app = buildApp(':memory:');
   const p = (await request(app).post('/api/fleet/products').send({ name: 's', gitUrl: 'https://github.com/o/r.git', defaultBranch: 'main' })).body;
   await request(app).put('/api/fleet/products/' + p.id).send({ webhookSecretRef: 'WH_TEST_HOOK' });
-  const t = (await request(app).post('/api/fleet/targets').send({ name: 't', kind: 'static-sftp', host: 'h', username: 'u', remoteDir: '/d' })).body;
-  const d = (await request(app).post('/api/fleet/deployments').send({ productId: p.id, branch: 'main', targetId: t.id, domain: 'x.example.com' })).body;
+  const t = (await request(app).post('/api/fleet/targets').send({ name: 't', kind: 'static-sftp', host: 'h', username: 'u', remoteDir: '/d', domain: 'x.example.com' })).body;
+  const d = (await request(app).post('/api/fleet/deployments').send({ productId: p.id, targetId: t.id })).body;
   const payload = { ref: 'refs/heads/main', repository: { clone_url: 'https://github.com/o/r.git' } };
   const r = await request(app).post('/api/fleet/webhooks/github').set('X-GitHub-Event', 'push').set('X-Hub-Signature-256', sign('topsecret', payload)).send(payload);
   expect(r.status).toBe(200);

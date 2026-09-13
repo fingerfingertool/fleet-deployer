@@ -11,8 +11,8 @@ test('edit product via PUT', async () => {
 test('delete blocked when deployments reference product', async () => {
   const app = buildApp(':memory:');
   const p = (await request(app).post('/api/fleet/products').send({ name: 's', gitUrl: 'https://x/y.git' })).body;
-  const h = (await request(app).post('/api/fleet/hosts').send({ name: 'v', ip: '1.2.3.4', sshUser: 'root' })).body;
-  await request(app).post('/api/fleet/deployments').send({ productId: p.id, branch: 'main', vdsId: h.id, domain: 'a.example.com' });
+  const t = (await request(app).post('/api/fleet/targets').send({ name: 'v', kind: 'vds', ip: '1.2.3.4', sshUser: 'root', domain: 'a.example.com' })).body;
+  await request(app).post('/api/fleet/deployments').send({ productId: p.id, targetId: t.id });
   expect((await request(app).delete('/api/fleet/products/' + p.id)).status).toBe(409);
 });
 test('delete works when unreferenced, 404 when unknown', async () => {

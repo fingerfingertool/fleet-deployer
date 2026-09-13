@@ -103,15 +103,13 @@ input::placeholder{color:var(--faint)}
       <h2>Deployments</h2>
       <p class="sub">Each row is one live clone: a branch of a product, on a host, behind a domain. Open a row to see the go-live checklist.</p>
       <div id="depTable"></div>
-      <h2 style="margin-top:26px;font-size:18px">Ship a new clone</h2>
+      <h2 style="margin-top:26px;font-size:18px">Bind product to host</h2>
       <div class="row">
         <select id="fProduct" aria-label="Product"></select>
-        <input id="fBranch" placeholder="branch (any branch = reskin)" value="main" size="26">
         <select id="targetPicker" aria-label="Target"></select>
         <span id="vdsFields" class="mono dim"></span>
         <span id="sftpFields" class="mono dim"></span>
-        <input id="fDomain" placeholder="domain, e.g. shop2.example.com" size="28">
-        <button class="btn" id="fShip">Ship it</button>
+        <button class="btn" id="fShip">Bind</button>
       </div>
     </section>
     <section id="tab-products" hidden>
@@ -138,6 +136,7 @@ input::placeholder{color:var(--faint)}
         <input id="sHost" placeholder="sftp host" size="20" hidden>
         <input id="sUser" placeholder="sftp username" size="14" hidden>
         <input id="sDir" placeholder="remote dir, e.g. /public_html" size="24" hidden>
+        <input id="sDom" placeholder="domain, e.g. site.example.com" size="24">
         <button class="btn" id="hAdd">Add host</button>
         <button class="btn" id="tAdd">Add target</button>
       </div>
@@ -225,14 +224,14 @@ function renderTargets(){
   const el=$('#targetTable'); if(!el) return;
   if(!DB.targets.length){el.innerHTML=`<div class="empty"><p>No targets yet. Add a VDS or static-sftp target below.</p></div>`;return}
   el.innerHTML=`<table><thead><tr><th>Target</th><th>Kind</th><th>Connection</th><th>Link</th><th></th></tr></thead><tbody>`+
-    DB.targets.map(t=>{const links=DB.deps.filter(d=>(d.targetId||d.vdsId)===t.id&&d.domain)
-      .map(d=>`<a href="https://${d.domain}" target="_blank" rel="noopener">${d.domain}</a>`).join('<br>');
-    return `<tr><td><b>${t.name}</b></td><td><span class="mono kind kind-${t.kind}">${t.kind}</span></td><td class="mono dim">${t.kind==='static-sftp'?(t.host||'')+' · '+(t.remoteDir||''):((t.ip||'')+' · '+(t.sshUser||''))}</td><td>${links||'<span class="dim">—</span>'}</td><td><button class="btn ghost small" data-del-target="${t.id}">Delete</button></td></tr>`}).join('')+`</tbody></table>`;
+    DB.targets.map(t=>{const link=t.domain?`<a href="https://${t.domain}" target="_blank" rel="noopener">${t.domain}</a>`:'<span class="dim">—</span>';
+    return `<tr><td><b>${t.name}</b></td><td><span class="mono kind kind-${t.kind}">${t.kind}</span></td><td class="mono dim">${t.kind==='static-sftp'?(t.host||'')+' · '+(t.remoteDir||''):((t.ip||'')+' · '+(t.sshUser||''))}</td><td>${link}</td><td><button class="btn ghost small" data-del-target="${t.id}">Delete</button></td></tr>`}).join('')+`</tbody></table>`;
   el.querySelectorAll('[data-del-target]').forEach(b=>b.onclick=async()=>{
     const used=DB.deps.filter(d=>(d.targetId||d.vdsId)===b.dataset.delTarget).length;
-    if(!confirm(used?`Delete this target? ${used} deployment(s) reference it and will be orphaned.`:'Delete this target?'))return;
+    if(used){toast('Target is bound — delete its deployment first.');return}
+    if(!confirm('Delete this target?'))return;
     const r=await fetch('/api/fleet/targets/'+b.dataset.delTarget,{method:'DELETE'});
-    r.ok?(toast('Target deleted.'),refresh()):toast('Could not delete.');
+    r.ok?(toast('Target deleted.'),refresh()):toast('Could not delete: '+((await r.json()).error||'unknown'));
   });
 }
 function updateTargetFields(){
@@ -299,8 +298,8 @@ $('#hKind').onchange=e=>{const sftp=e.target.value==='static-sftp';$('#hIp').hid
 $('#tAdd').onclick=async()=>{const kind=$('#hKind').value;const name=$('#hName').value.trim();
   const body=kind==='static-sftp'?{kind,name,host:$('#sHost').value.trim(),username:$('#sUser').value.trim(),remoteDir:$('#sDir').value.trim()}:{kind,name,ip:$('#hIp').value.trim(),sshUser:$('#hUser').value.trim()||'root',sshKeyPath:$('#hKey').value.trim()||undefined};
   const r=await api.post('/api/fleet/targets',body);r.ok?(toast('Target added.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
-$('#fShip').onclick=async()=>{const tp=$('#targetPicker');const r=await api.post('/api/fleet/deployments',{productId:$('#fProduct').value,branch:$('#fBranch').value.trim()||'main',targetId:tp?tp.value:undefined,domain:$('#fDomain').value.trim(),envValues:{}});
-  r.ok?(toast('Clone charted. Open it for the go-live checklist.'),refresh()):toast('Could not chart: '+(r.body.error||'unknown'));};
+$('#fShip').onclick=async()=>{const tp=$('#targetPicker');const r=await api.post('/api/fleet/deployments',{productId:$('#fProduct').value,targetId:tp?tp.value:undefined,envValues:{}});
+  r.ok?(toast('Product bound. Open it for the go-live checklist.'),refresh()):toast('Could not bind: '+(r.body.error||'unknown'));};
 $('#gPlan').onclick=()=>{const head=$('#gHead').value.trim();if(!head){toast('Enter the origin HEAD commit first.');return}
   const rows=DB.deps.map(d=>({d,behind:d.currentCommit!==head}));
   $('#propTable').innerHTML=`<table><thead><tr><th>Clone</th><th>Verdict</th></tr></thead><tbody>`+

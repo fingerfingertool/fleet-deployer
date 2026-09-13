@@ -29,3 +29,9 @@ test('products table has edit/delete and branch select wiring', () => {
   expect(html).toMatch('data-del-product');
   expect(html).toMatch('/branches');
 });
+test('binding model: target domain input, no branch/domain inputs on bind form', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('sDom');
+  expect(html).not.toMatch('fBranch');
+  expect(html).not.toMatch('fDomain');
+});
