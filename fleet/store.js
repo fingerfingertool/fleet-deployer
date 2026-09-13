@@ -28,7 +28,7 @@ function withBuildDefaults(p) {
   return p;
 }
 function createStore(file) {
-  let data = { products: [], hosts: [], deployments: [], targets: [] };
+  let data = { products: [], hosts: [], deployments: [], targets: [], runs: [] };
   const loaded = loadFile(file);
   if (loaded && typeof loaded === 'object') {
     data = {
@@ -36,6 +36,7 @@ function createStore(file) {
       hosts: Array.isArray(loaded.hosts) ? loaded.hosts : [],
       deployments: Array.isArray(loaded.deployments) ? loaded.deployments : [],
       targets: Array.isArray(loaded.targets) ? loaded.targets : [],
+      runs: Array.isArray(loaded.runs) ? loaded.runs : [],
     };
   }
   function ensureTargets() {
@@ -71,6 +72,16 @@ function createStore(file) {
     migrateHostsToTargets: () => { ensureTargets(); persist(); return data.targets; },
     listDeployments: () => data.deployments,
     saveDeployment: (d) => { d.id = d.id || newId('d'); data.deployments = [...data.deployments.filter(x => x.id !== d.id), d]; persist(); return d; },
+    listRuns: () => data.runs,
+    getRun: (id) => data.runs.find(x => x.id === id),
+    saveRun: (r) => {
+      r.id = r.id || newId('r');
+      r.startedAt = r.startedAt || new Date().toISOString();
+      data.runs = [...data.runs.filter(x => x.id !== r.id), r];
+      persist();
+      return r;
+    },
+    runsForDeployment: (deploymentId) => data.runs.filter(x => x.deploymentId === deploymentId).sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || '')),
   };
 }
 module.exports = { createStore };

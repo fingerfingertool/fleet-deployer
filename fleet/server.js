@@ -152,6 +152,16 @@ function buildApp(file) {
     res.status(201).json(store.saveDeployment(deployment));
   });
   app.get('/api/fleet/deployments', (req, res) => res.json(store.listDeployments()));
+  app.get('/api/fleet/deployments/:id/runs', (req, res) => {
+    const d = store.listDeployments().find(x => x.id === req.params.id);
+    if (!d) return res.status(404).json({ error: 'unknown deployment' });
+    res.json(store.runsForDeployment(req.params.id));
+  });
+  app.get('/api/fleet/runs/:runId', (req, res) => {
+    const r = store.getRun(req.params.runId);
+    if (!r) return res.status(404).json({ error: 'unknown run' });
+    res.json(r);
+  });
   app.get('/api/fleet/products', (req, res) => res.json(store.listProducts()));
   app.get('/api/fleet/hosts', (req, res) => res.json(store.listHosts()));
   return app;
