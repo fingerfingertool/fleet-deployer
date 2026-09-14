@@ -228,8 +228,10 @@ function renderBindings(){
   });
 }
 function renderProducts(){
-  $('#prodTable').innerHTML=DB.products.length?`<table><thead><tr><th>Product</th><th>Default branch</th><th>HEAD</th><th></th></tr></thead><tbody>`+
-    DB.products.map(p=>`<tr><td><b>${p.name}</b></td><td class="mono">${p.defaultBranch||'main'}</td><td class="mono dim" data-head="${p.id}">…</td><td><button class="btn ghost small" data-edit-product="${p.id}">Edit</button> <button class="btn ghost small" data-del-product="${p.id}">Delete</button></td></tr>`).join('')+`</tbody></table>`
+  $('#prodTable').innerHTML=DB.products.length?`<table><thead><tr><th>Product</th><th>Default branch</th><th>HEAD</th><th>Claimed</th><th></th></tr></thead><tbody>`+
+    DB.products.map(p=>{const dep=DB.deps.find(d=>d.productId===p.id);const t=dep&&DB.targets.find(x=>x.id===(dep.targetId||dep.vdsId));
+    const claimed=t?`<span class="mono">${t.name}</span>`:'<span class="dim">—</span>';
+    return `<tr><td><b>${p.name}</b></td><td class="mono">${p.defaultBranch||'main'}</td><td class="mono dim" data-head="${p.id}">…</td><td>${claimed}</td><td><button class="btn ghost small" data-edit-product="${p.id}">Edit</button> <button class="btn ghost small" data-del-product="${p.id}">Delete</button></td></tr>`}).join('')+`</tbody></table>`
     :`<div class="empty"><p>No products yet. A product is just a repo — add yours below.</p></div>`;
   document.querySelectorAll('[data-head]').forEach(async cell=>{
     try{
@@ -271,9 +273,11 @@ function renderHosts(){
 function renderTargets(){
   const el=$('#targetTable'); if(!el) return;
   if(!DB.targets.length){el.innerHTML=`<div class="empty"><p>No targets yet. Add a VDS or static-sftp target below.</p></div>`;return}
-  el.innerHTML=`<table><thead><tr><th>Target</th><th>Kind</th><th>Connection</th><th>Link</th><th></th></tr></thead><tbody>`+
+  el.innerHTML=`<table><thead><tr><th>Target</th><th>Kind</th><th>Connection</th><th>Link</th><th>Claimed</th><th></th></tr></thead><tbody>`+
     DB.targets.map(t=>{const link=t.domain?`<a href="https://${t.domain}" target="_blank" rel="noopener">${t.domain}</a>`:'<span class="dim">—</span>';
-    return `<tr><td><b>${t.name}</b></td><td><span class="mono kind kind-${t.kind}">${t.kind}</span></td><td class="mono dim">${t.kind==='static-sftp'?(t.host||'')+' · '+(t.remoteDir||''):((t.ip||'')+' · '+(t.sshUser||''))}</td><td>${link}</td><td><button class="btn ghost small" data-edit-target="${t.id}">Edit</button> <button class="btn ghost small" data-dup-target="${t.id}">Duplicate</button> <button class="btn ghost small" data-del-target="${t.id}">Delete</button></td></tr>`}).join('')+`</tbody></table>`;
+    const dep=DB.deps.find(d=>(d.targetId||d.vdsId)===t.id);const prod=dep&&DB.products.find(p=>p.id===dep.productId);
+    const claimed=prod?`<span class="mono">${prod.name}</span>`:'<span class="dim">—</span>';
+    return `<tr><td><b>${t.name}</b></td><td><span class="mono kind kind-${t.kind}">${t.kind}</span></td><td class="mono dim">${t.kind==='static-sftp'?(t.host||'')+' · '+(t.remoteDir||''):((t.ip||'')+' · '+(t.sshUser||''))}</td><td>${link}</td><td>${claimed}</td><td><button class="btn ghost small" data-edit-target="${t.id}">Edit</button> <button class="btn ghost small" data-dup-target="${t.id}">Duplicate</button> <button class="btn ghost small" data-del-target="${t.id}">Delete</button></td></tr>`}).join('')+`</tbody></table>`;
   el.querySelectorAll('[data-edit-target]').forEach(b=>b.onclick=()=>{
     const t=DB.targets.find(x=>x.id===b.dataset.editTarget);if(!t)return;
     const row=b.closest('tr');

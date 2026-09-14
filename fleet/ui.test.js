@@ -73,3 +73,7 @@ test('history prefers run snapshot; page auto-refreshes when idle', () => {
   expect(html).toMatch('r.productId');
   expect(html).toMatch('setInterval');
 });
+test('targets and products show claimed state', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('Claimed');
+});
