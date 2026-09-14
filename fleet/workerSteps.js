@@ -21,7 +21,9 @@ function coded(code, message) {
 }
 
 // FTP creds resolved from server env vault by convention:
-//   process.env['FTP_PASS_' + targetId]
+//   process.env['FTP_PASS_' + targetId], falling back to FTP_PASS_DEFAULT
+// (one account usually reaches the whole home dir, so duplicates and new
+// targets work with zero vault steps; set a per-target value only to override).
 // (documented here; never stored in DB or logs).
 async function runSteps({ store, deployment, run }, log = () => {}) {
   const product = await store.getProduct(deployment.productId);
@@ -72,8 +74,8 @@ async function runSteps({ store, deployment, run }, log = () => {}) {
     const ftp = require('basic-ftp');
     const client = new ftp.Client(600000);
     try {
-      const password = process.env['FTP_PASS_' + target.id];
-      if (!password) throw coded('auth-failed', 'missing FTP credentials in vault');
+      const password = process.env['FTP_PASS_' + target.id] || process.env.FTP_PASS_DEFAULT;
+      if (!password) throw coded('auth-failed', `missing FTP credentials in vault for target ${target.name} (${target.id}): set FTP_PASS_${target.id} or FTP_PASS_DEFAULT`);
       await client.access({
         host: target.host,
         user: target.username,
