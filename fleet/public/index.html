@@ -15,6 +15,7 @@
   --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   --disp:"Space Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
 }
+input.bad,select.bad{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--ink);color:var(--paper);font-family:var(--disp);font-size:15px;line-height:1.5}
 a{color:inherit}
@@ -144,7 +145,6 @@ input::placeholder{color:var(--faint)}
         <input id="sUser" placeholder="sftp username" size="14" hidden>
         <input id="sDir" placeholder="remote dir, e.g. /public_html" size="24" hidden>
         <input id="sDom" placeholder="domain, e.g. site.example.com" size="24">
-        <button class="btn" id="hAdd">Add host</button>
         <button class="btn" id="tAdd">Add target</button>
       </div>
     </section>
@@ -262,7 +262,16 @@ function renderTargets(){
   if(!DB.targets.length){el.innerHTML=`<div class="empty"><p>No targets yet. Add a VDS or static-sftp target below.</p></div>`;return}
   el.innerHTML=`<table><thead><tr><th>Target</th><th>Kind</th><th>Connection</th><th>Link</th><th></th></tr></thead><tbody>`+
     DB.targets.map(t=>{const link=t.domain?`<a href="https://${t.domain}" target="_blank" rel="noopener">${t.domain}</a>`:'<span class="dim">—</span>';
-    return `<tr><td><b>${t.name}</b></td><td><span class="mono kind kind-${t.kind}">${t.kind}</span></td><td class="mono dim">${t.kind==='static-sftp'?(t.host||'')+' · '+(t.remoteDir||''):((t.ip||'')+' · '+(t.sshUser||''))}</td><td>${link}</td><td><button class="btn ghost small" data-del-target="${t.id}">Delete</button></td></tr>`}).join('')+`</tbody></table>`;
+    return `<tr><td><b>${t.name}</b></td><td><span class="mono kind kind-${t.kind}">${t.kind}</span></td><td class="mono dim">${t.kind==='static-sftp'?(t.host||'')+' · '+(t.remoteDir||''):((t.ip||'')+' · '+(t.sshUser||''))}</td><td>${link}</td><td><button class="btn ghost small" data-dup-target="${t.id}">Duplicate</button> <button class="btn ghost small" data-del-target="${t.id}">Delete</button></td></tr>`}).join('')+`</tbody></table>`;
+  el.querySelectorAll('[data-dup-target]').forEach(b=>b.onclick=()=>{
+    const t=DB.targets.find(x=>x.id===b.dataset.dupTarget);if(!t)return;
+    $('#hKind').value=t.kind;$('#hKind').onchange({target:$('#hKind')});
+    $('#hName').value=t.name+'-copy';$('#sDom').value=t.domain||'';
+    $('#hIp').value=t.ip||'';$('#hUser').value=t.sshUser||'root';$('#hKey').value=t.sshKeyPath||'';
+    $('#sHost').value=t.host||'';$('#sUser').value=t.username||'';$('#sDir').value=t.remoteDir||'';
+    toast('Duplicated — change the name (must be unique) and Save.');
+    $('#hName').focus();
+  });
   el.querySelectorAll('[data-del-target]').forEach(b=>b.onclick=async()=>{
     const used=DB.deps.filter(d=>(d.targetId||d.vdsId)===b.dataset.delTarget).length;
     if(used){toast('Target is bound — delete its deployment first.');return}
@@ -331,12 +340,18 @@ document.querySelectorAll('.rail button').forEach(b=>b.onclick=()=>{
 try{const last=localStorage.getItem('fleet-tab');if(last&&$('#tab-'+last))document.querySelector(`.rail button[data-tab="${last}"]`).click()}catch{}
 $('#pAdd').onclick=async()=>{const r=await api.post('/api/fleet/products',{name:$('#pName').value.trim(),gitUrl:$('#pGit').value.trim(),defaultBranch:$('#pBranch').value.trim()||'main',repoKeyPath:$('#pKey').value.trim()||undefined});
   r.ok?(toast('Product added.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
-$('#hAdd').onclick=async()=>{const r=await api.post('/api/fleet/hosts',{name:$('#hName').value.trim(),ip:$('#hIp').value.trim(),sshUser:$('#hUser').value.trim()||'root',sshKeyPath:$('#hKey').value.trim()||undefined});
-  r.ok?(toast('Host added. Point the domain at its IP.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
 $('#hKind').onchange=e=>{const sftp=e.target.value==='static-sftp';$('#hIp').hidden=sftp;$('#hUser').hidden=sftp;$('#hKey').hidden=sftp;$('#sHost').hidden=!sftp;$('#sUser').hidden=!sftp;$('#sDir').hidden=!sftp;};
-$('#tAdd').onclick=async()=>{const kind=$('#hKind').value;const name=$('#hName').value.trim();
-  const body=kind==='static-sftp'?{kind,name,host:$('#sHost').value.trim(),username:$('#sUser').value.trim(),remoteDir:$('#sDir').value.trim()}:{kind,name,ip:$('#hIp').value.trim(),sshUser:$('#hUser').value.trim()||'root',sshKeyPath:$('#hKey').value.trim()||undefined};
-  const r=await api.post('/api/fleet/targets',body);r.ok?(toast('Target added.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
+$('#tAdd').onclick=async()=>{
+  document.querySelectorAll('#tab-targets .bad').forEach(e=>e.classList.remove('bad'));
+  const kind=$('#hKind').value;const name=$('#hName').value.trim();const domain=$('#sDom').value.trim();
+  const body=kind==='static-sftp'?{kind,name,domain,host:$('#sHost').value.trim(),username:$('#sUser').value.trim(),remoteDir:$('#sDir').value.trim()}:{kind,name,domain,ip:$('#hIp').value.trim(),sshUser:$('#hUser').value.trim()||'root',sshKeyPath:$('#hKey').value.trim()||undefined};
+  const r=await api.post('/api/fleet/targets',body);
+  if(r.ok){toast('Target added.');refresh();return}
+  const fields={name:'#hName',domain:'#sDom',ip:'#hIp',sshUser:'#hUser',sshKeyPath:'#hKey',host:'#sHost',username:'#sUser',remoteDir:'#sDir',kind:'#hKind'};
+  const sel=r.body.field&&fields[r.body.field];
+  if(sel){const el=$(sel);el.classList.add('bad');el.focus()}
+  toast('Could not add — '+(r.body.field?r.body.field+': ':'')+(r.body.error||'unknown'));
+};
 $('#fShip').onclick=async()=>{const tp=$('#targetPicker');const r=await api.post('/api/fleet/deployments',{productId:$('#fProduct').value,targetId:tp?tp.value:undefined,envValues:{}});
   r.ok?(toast('Product bound. Open it for the go-live checklist.'),refresh()):toast('Could not bind: '+(r.body.error||'unknown'));};
 $('#gPlan').onclick=()=>{const head=$('#gHead').value.trim();if(!head){toast('Enter the origin HEAD commit first.');return}

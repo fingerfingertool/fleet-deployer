@@ -162,16 +162,19 @@ function buildApp(file) {
   }
   function validateTarget(body) {
     const { kind } = body || {};
-    if (!ALLOWED_KINDS.includes(kind)) return 'kind must be one of vds, static-sftp';
-    if (!body.name) return 'name required';
-    if (!validateDomain(body.domain)) return 'valid domain required (one target serves one domain)';
+    if (!ALLOWED_KINDS.includes(kind)) return { field: 'kind', message: 'kind must be one of vds, static-sftp' };
+    if (!body.name) return { field: 'name', message: 'name required' };
+    if (!validateDomain(body.domain)) return { field: 'domain', message: 'valid domain required (one target serves one domain)' };
     if (kind === 'vds') {
-      if (!body.ip || !body.sshUser) return 'vds requires name, ip, sshUser';
+      if (!body.ip) return { field: 'ip', message: 'IP address required for vds' };
+      if (!body.sshUser) return { field: 'sshUser', message: 'ssh user required for vds' };
     } else {
-      if (!body.host || !body.username || !body.remoteDir) return 'static-sftp requires name, host, username, remoteDir';
+      if (!body.host) return { field: 'host', message: 'sftp host required' };
+      if (!body.username) return { field: 'username', message: 'sftp username required' };
+      if (!body.remoteDir) return { field: 'remoteDir', message: 'remote dir required' };
     }
     for (const f of ['sshKeyPath', 'keyPath']) {
-      if (body[f] !== undefined && (typeof body[f] !== 'string' || body[f].length > 512)) return f + ' must be a string of max 512 chars';
+      if (body[f] !== undefined && (typeof body[f] !== 'string' || body[f].length > 512)) return { field: f, message: f + ' must be a string of max 512 chars' };
     }
     return null;
   }
@@ -183,7 +186,8 @@ function buildApp(file) {
   }));
   app.post('/api/fleet/targets', ah(async (req, res) => {
     const err = validateTarget(req.body || {});
-    if (err) return res.status(400).json({ error: err });
+    if (err) return res.status(400).json({ error: err.message, field: err.field });
+    if ((await store.listTargets()).some(t => t.name === req.body.name)) return res.status(409).json({ error: 'target name already exists', field: 'name' });
     const { privateKey, sshKey, password, keyMaterial, ...rest } = req.body;
     try {
       res.status(201).json(await store.saveTarget(rest));
@@ -195,16 +199,20 @@ function buildApp(file) {
     const t = await store.getTarget(req.params.id);
     if (!t) return res.status(404).json({ error: 'unknown target' });
     const { name, domain, sshKeyPath } = req.body || {};
-    if (name !== undefined) t.name = name;
+    if (name !== undefined && name !== t.name) {
+      if (!name) return res.status(400).json({ error: 'name required', field: 'name' });
+      if ((await store.listTargets()).some(x => x.id !== t.id && x.name === name)) return res.status(409).json({ error: 'target name already exists', field: 'name' });
+      t.name = name;
+    }
     if (domain !== undefined) {
-      if (!validateDomain(domain)) return res.status(400).json({ error: 'invalid domain' });
+      if (!validateDomain(domain)) return res.status(400).json({ error: 'invalid domain', field: 'domain' });
       t.domain = domain;
     }
     for (const f of ['ip', 'sshUser', 'host', 'username', 'remoteDir', 'providerLabel']) {
       if (req.body[f] !== undefined) t[f] = req.body[f];
     }
     if (sshKeyPath !== undefined) {
-      if (typeof sshKeyPath !== 'string' || sshKeyPath.length > 512) return res.status(400).json({ error: 'sshKeyPath must be a string of max 512 chars' });
+      if (typeof sshKeyPath !== 'string' || sshKeyPath.length > 512) return res.status(400).json({ error: 'sshKeyPath must be a string of max 512 chars', field: 'sshKeyPath' });
       t.sshKeyPath = sshKeyPath;
     }
     const { privateKey, sshKey, password, keyMaterial, ...rest } = t;

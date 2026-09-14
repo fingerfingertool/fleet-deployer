@@ -110,3 +110,17 @@ test('runs list newest first', async () => {
   const app = buildApp(':memory:');
   expect((await request(app).get('/api/fleet/runs')).body).toEqual([]);
 });
+test('duplicate target names rejected with field', async () => {
+  const app = buildApp(':memory:');
+  const body = { name: 'dup', kind: 'vds', ip: '1.2.3.4', sshUser: 'root', domain: 'a.example.com' };
+  expect((await request(app).post('/api/fleet/targets').send(body)).status).toBe(201);
+  const r = await request(app).post('/api/fleet/targets').send(body);
+  expect(r.status).toBe(409);
+  expect(r.body.field).toBe('name');
+});
+test('target validation errors carry field', async () => {
+  const app = buildApp(':memory:');
+  const r = await request(app).post('/api/fleet/targets').send({ name: 'x', kind: 'static-sftp', domain: 'x.example.com' });
+  expect(r.status).toBe(400);
+  expect(r.body.field).toBe('host');
+});

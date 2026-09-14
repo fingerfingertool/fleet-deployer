@@ -9,7 +9,7 @@ test('targets tab has sftp creation inputs and kind toggle wiring POST /api/flee
   for (const id of ['hKind', 'sHost', 'sUser', 'sDir', 'tAdd']) expect(html).toMatch(id);
   expect(html).toMatch('/api/fleet/targets');
   // VDS row still working
-  for (const id of ['hName', 'hIp', 'hUser', 'hAdd']) expect(html).toMatch(id);
+  for (const id of ['hName', 'hIp', 'hUser', 'tAdd']) expect(html).toMatch(id);
 });
 test('targets table has delete buttons and clickable site links', () => {
   const html = fs.readFileSync('fleet/public/index.html', 'utf8');
@@ -55,4 +55,10 @@ test('deployments is global history, bindings have edit+deploy', () => {
   expect(html).toMatch('data-edit-bind');
   expect(html).toMatch('/api/fleet/runs');
   expect(html).toMatch('eBindSave');
+});
+test('targets form has single add button, duplicate, field highlight', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).not.toMatch('id="hAdd"');
+  expect(html).toMatch('data-dup-target');
+  expect(html).toMatch("input.bad");
 });
