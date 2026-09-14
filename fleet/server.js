@@ -1,6 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
-const { createStore } = require('./store');
+const { createStore, createPgStore } = require('./store');
 const { createWorker } = require('./worker');
 const ALLOWED_KINDS = ['vds', 'static-sftp'];
 function basicAuth(req, res, next) {
@@ -19,18 +19,21 @@ function basicAuth(req, res, next) {
   }
   next();
 }
+// Express 4 does not catch async throws — wrap all async handlers.
+const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 function buildApp(file) {
-  const store = createStore(file || 'fleet.json');
+  const dbFile = file || 'fleet.json';
+  const store = process.env.DATABASE_URL ? createPgStore(process.env.DATABASE_URL, dbFile) : createStore(dbFile);
   const app = express();
   app.use('/api/fleet/webhooks/github', express.raw({ type: 'application/json' }));
   app.use(express.json());
   app.get('/api/fleet/health', (req, res) => res.json({ ok: true }));
-  app.post('/api/fleet/webhooks/github', (req, res) => {
+  app.post('/api/fleet/webhooks/github', ah(async (req, res) => {
     const event = req.headers['x-github-event'];
     if (event === 'ping') return res.json({ ok: true });
     if (event !== 'push') return res.json({ ignored: true });
     const raw = req.body; // Buffer from express.raw
-    const products = store.listProducts();
+    const products = await store.listProducts();
     const match = products.find(p => {
       const ref = p.webhookSecretRef && process.env[p.webhookSecretRef];
       if (!ref) return false;
@@ -44,15 +47,15 @@ function buildApp(file) {
     const branch = (payload.ref || '').replace('refs/heads/', '');
     const urls = [payload.repository && payload.repository.clone_url, payload.repository && payload.repository.ssh_url].filter(Boolean);
     const queued = [];
-    for (const d of store.listDeployments().filter(x => x.productId === match.id && (match.defaultBranch || 'main') === branch)) {
+    for (const d of (await store.listDeployments()).filter(x => x.productId === match.id && (match.defaultBranch || 'main') === branch)) {
       if (match.gitUrl && !urls.includes(match.gitUrl) && payload.repository && payload.repository.full_name && !match.gitUrl.includes(payload.repository.full_name)) continue;
       app.locals.worker.queue(d.id, 'webhook').catch(() => {});
       queued.push(d.id);
     }
     res.json({ queued });
-  });
+  }));
   app.use('/api/fleet', basicAuth);
-  app.post('/api/fleet/products', (req, res) => {
+  app.post('/api/fleet/products', ah(async (req, res) => {
     const { name, gitUrl, defaultBranch, buildConfig, repoKeyPath } = req.body || {};
     if (!name || !gitUrl) return res.status(400).json({ error: 'name and gitUrl required' });
     const product = { name, gitUrl, defaultBranch: defaultBranch || 'main' };
@@ -69,10 +72,10 @@ function buildApp(file) {
       if (command !== undefined) product.buildConfig.command = command;
       if (outputDir !== undefined) product.buildConfig.outputDir = outputDir;
     }
-    res.status(201).json(store.saveProduct(product));
-  });
-  app.get('/api/fleet/products/:id/branches', (req, res) => {
-    const p = store.getProduct(req.params.id);
+    res.status(201).json(await store.saveProduct(product));
+  }));
+  app.get('/api/fleet/products/:id/branches', ah(async (req, res) => {
+    const p = await store.getProduct(req.params.id);
     if (!p) return res.status(404).json({ error: 'unknown product' });
     const { execFile } = require('child_process');
     const env = { ...process.env };
@@ -82,12 +85,12 @@ function buildApp(file) {
     }
     execFile('git', ['ls-remote', '--heads', p.gitUrl], { env, timeout: 20000 }, (err, stdout) => {
       if (err) return res.status(502).json({ error: 'could not list branches' });
-      const branches = stdout.split('\n').filter(Boolean).map(l => l.split('\t')[1].replace('refs/heads/', ''));
+      const branches = stdout.split('\n').filter(Boolean).map(l => l.split('	')[1].replace('refs/heads/', ''));
       res.json({ branches });
     });
-  });
-  app.put('/api/fleet/products/:id', (req, res) => {
-    const p = store.getProduct(req.params.id);
+  }));
+  app.put('/api/fleet/products/:id', ah(async (req, res) => {
+    const p = await store.getProduct(req.params.id);
     if (!p) return res.status(404).json({ error: 'unknown product' });
     const { name, gitUrl, defaultBranch, buildConfig, repoKeyPath, webhookSecretRef } = req.body || {};
     if (name !== undefined) p.name = name;
@@ -126,15 +129,15 @@ function buildApp(file) {
       p.webhookSecretRef = webhookSecretRef;
     }
     const { privateKey, sshKey, password, keyMaterial, ...rest } = p;
-    res.json(store.saveProduct(rest));
-  });
-  app.delete('/api/fleet/products/:id', (req, res) => {
-    if (!store.getProduct(req.params.id)) return res.status(404).json({ error: 'unknown product' });
-    if (store.listDeployments().some(d => d.productId === req.params.id)) return res.status(409).json({ error: 'product has deployments' });
-    store.deleteProduct(req.params.id);
+    res.json(await store.saveProduct(rest));
+  }));
+  app.delete('/api/fleet/products/:id', ah(async (req, res) => {
+    if (!(await store.getProduct(req.params.id))) return res.status(404).json({ error: 'unknown product' });
+    if ((await store.listDeployments()).some(d => d.productId === req.params.id)) return res.status(409).json({ error: 'product has deployments' });
+    await store.deleteProduct(req.params.id);
     res.status(204).end();
-  });
-  app.post('/api/fleet/hosts', (req, res) => {
+  }));
+  app.post('/api/fleet/hosts', ah(async (req, res) => {
     const { name, ip, sshUser, sshKeyPath } = req.body || {};
     if (!name || !ip || !sshUser) return res.status(400).json({ error: 'name, ip, sshUser required' });
     // Never persist key material: accept only sshKeyPath (string, max 512)
@@ -148,8 +151,8 @@ function buildApp(file) {
     const host = { name, ip, sshUser };
     if (keyPath !== undefined) host.sshKeyPath = keyPath;
     // Explicitly strip sshKey / privateKey even if present in body — never saved
-    res.status(201).json(store.saveHost(host));
-  });
+    res.status(201).json(await store.saveHost(host));
+  }));
   function validateDomain(v) {
     if (typeof v !== 'string' || v.length === 0 || v.length > 253) return false;
     return v.split('.').every((l) => /^(?!-)[A-Za-z0-9-]{1,63}(?<!-)$/.test(l));
@@ -169,31 +172,26 @@ function buildApp(file) {
     }
     return null;
   }
-  app.get('/api/fleet/targets', (req, res) => res.json(store.listTargets()));
-  app.get('/api/fleet/targets/:id', (req, res) => {
-    const t = store.getTarget(req.params.id);
+  app.get('/api/fleet/targets', ah(async (req, res) => res.json(await store.listTargets())));
+  app.get('/api/fleet/targets/:id', ah(async (req, res) => {
+    const t = await store.getTarget(req.params.id);
     if (!t) return res.status(404).json({ error: 'unknown target' });
     res.json(t);
-  });
-  app.post('/api/fleet/targets', (req, res) => {
+  }));
+  app.post('/api/fleet/targets', ah(async (req, res) => {
     const err = validateTarget(req.body || {});
     if (err) return res.status(400).json({ error: err });
     const { privateKey, sshKey, password, keyMaterial, ...rest } = req.body;
     try {
-      res.status(201).json(store.saveTarget(rest));
+      res.status(201).json(await store.saveTarget(rest));
     } catch (e) {
       res.status(400).json({ error: e.message });
     }
-  });
-  app.delete('/api/fleet/targets/:id', (req, res) => {
-    if (store.listDeployments().some(d => (d.targetId || d.vdsId) === req.params.id)) return res.status(409).json({ error: 'target has deployments' });
-    store.deleteTarget(req.params.id);
-    res.status(204).end();
-  });
-  app.put('/api/fleet/targets/:id', (req, res) => {
-    const t = store.getTarget(req.params.id);
+  }));
+  app.put('/api/fleet/targets/:id', ah(async (req, res) => {
+    const t = await store.getTarget(req.params.id);
     if (!t) return res.status(404).json({ error: 'unknown target' });
-    const { name, domain, ip, sshUser, sshKeyPath, host, username, remoteDir, providerLabel } = req.body || {};
+    const { name, domain, sshKeyPath } = req.body || {};
     if (name !== undefined) t.name = name;
     if (domain !== undefined) {
       if (!validateDomain(domain)) return res.status(400).json({ error: 'invalid domain' });
@@ -208,23 +206,28 @@ function buildApp(file) {
     }
     const { privateKey, sshKey, password, keyMaterial, ...rest } = t;
     try {
-      res.json(store.saveTarget(rest));
+      res.json(await store.saveTarget(rest));
     } catch (e) {
       res.status(400).json({ error: e.message });
     }
-  });
-  app.post('/api/fleet/deployments', (req, res) => {
+  }));
+  app.delete('/api/fleet/targets/:id', ah(async (req, res) => {
+    if ((await store.listDeployments()).some(d => (d.targetId || d.vdsId) === req.params.id)) return res.status(409).json({ error: 'target has deployments' });
+    await store.deleteTarget(req.params.id);
+    res.status(204).end();
+  }));
+  app.post('/api/fleet/deployments', ah(async (req, res) => {
     const { productId, vdsId, targetId, envValues } = req.body || {};
     const tid = targetId || vdsId;
     if (!productId || !tid) return res.status(400).json({ error: 'productId and targetId required' });
     // FK checks
-    const product = store.getProduct(productId);
+    const product = await store.getProduct(productId);
     if (!product) return res.status(400).json({ error: 'unknown productId' });
-    const target = store.getTarget(tid) || store.getHost(tid);
+    const target = (await store.getTarget(tid)) || (await store.getHost(tid));
     if (!target) return res.status(400).json({ error: 'unknown target' });
     if (!target.domain) return res.status(400).json({ error: 'target has no domain' });
     // 1:1 binding: one target serves one product
-    if (store.listDeployments().some(d => (d.targetId || d.vdsId) === tid)) return res.status(409).json({ error: 'target already bound' });
+    if ((await store.listDeployments()).some(d => (d.targetId || d.vdsId) === tid)) return res.status(409).json({ error: 'target already bound' });
     // Product is repo+branch; binding inherits both plus the target domain
     const deployment = {
       productId, branch: product.defaultBranch || 'main', targetId: tid, vdsId: tid, domain: target.domain,
@@ -232,11 +235,12 @@ function buildApp(file) {
       status: 'draft',
       currentCommit: null,
     };
-    res.status(201).json(store.saveDeployment(deployment));
-  });
-  app.get('/api/fleet/deployments', (req, res) => {
+    res.status(201).json(await store.saveDeployment(deployment));
+  }));
+  app.get('/api/fleet/deployments', ah(async (req, res) => {
     const w = app.locals.worker;
-    res.json(store.listDeployments().map((d) => {
+    const list = await store.listDeployments();
+    res.json(list.map((d) => {
       if ((d.status === 'queued' || d.status === 'running') && w && typeof w.queueLength === 'function') {
         try {
           const n = w.queueLength(d.targetId || d.vdsId);
@@ -245,54 +249,54 @@ function buildApp(file) {
       }
       return d;
     }));
-  });
-  app.get('/api/fleet/deployments/:id/runs', (req, res) => {
-    const d = store.listDeployments().find(x => x.id === req.params.id);
+  }));
+  app.get('/api/fleet/deployments/:id/runs', ah(async (req, res) => {
+    const d = (await store.listDeployments()).find(x => x.id === req.params.id);
     if (!d) return res.status(404).json({ error: 'unknown deployment' });
-    res.json(store.runsForDeployment(req.params.id));
-  });
-  app.get('/api/fleet/runs/:runId', (req, res) => {
-    const r = store.getRun(req.params.runId);
+    res.json(await store.runsForDeployment(req.params.id));
+  }));
+  app.get('/api/fleet/runs/:runId', ah(async (req, res) => {
+    const r = await store.getRun(req.params.runId);
     if (!r) return res.status(404).json({ error: 'unknown run' });
     res.json(r);
-  });
-  app.get('/api/fleet/runs', (req, res) => {
-    res.json(store.listRuns().slice().sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || '')));
-  });
-  app.put('/api/fleet/deployments/:id', (req, res) => {
-    const d = store.getDeployment(req.params.id);
+  }));
+  app.get('/api/fleet/runs', ah(async (req, res) => {
+    res.json((await store.listRuns()).slice().sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || '')));
+  }));
+  app.put('/api/fleet/deployments/:id', ah(async (req, res) => {
+    const d = await store.getDeployment(req.params.id);
     if (!d) return res.status(404).json({ error: 'unknown deployment' });
     if (req.body.productId !== undefined) {
-      const p = store.getProduct(req.body.productId);
+      const p = await store.getProduct(req.body.productId);
       if (!p) return res.status(400).json({ error: 'unknown productId' });
       d.productId = p.id;
       d.branch = p.defaultBranch || 'main';
     }
-    res.json(store.saveDeployment(d));
-  });
-  app.get('/api/fleet/products', (req, res) => res.json(store.listProducts()));
-  app.get('/api/fleet/hosts', (req, res) => res.json(store.listHosts()));
+    res.json(await store.saveDeployment(d));
+  }));
+  app.delete('/api/fleet/deployments/:id', ah(async (req, res) => {
+    if (!(await store.getDeployment(req.params.id))) return res.status(404).json({ error: 'unknown deployment' });
+    await store.deleteDeployment(req.params.id);
+    res.status(204).end();
+  }));
+  app.get('/api/fleet/products', ah(async (req, res) => res.json(await store.listProducts())));
+  app.get('/api/fleet/hosts', ah(async (req, res) => res.json(await store.listHosts())));
   const worker = createWorker(store);
   app.locals.store = store;
   app.locals.worker = worker;
-  app.post('/api/fleet/deployments/:id/deploy', (req, res) => {
-    const d = store.getDeployment(req.params.id);
+  app.post('/api/fleet/deployments/:id/deploy', ah(async (req, res) => {
+    const d = await store.getDeployment(req.params.id);
     if (!d) return res.status(404).json({ error: 'unknown deployment' });
     app.locals.worker.queue(d.id, 'manual').catch(() => {});
     res.status(202).json({ queued: true });
-  });
-  app.delete('/api/fleet/deployments/:id', (req, res) => {
-    if (!store.getDeployment(req.params.id)) return res.status(404).json({ error: 'unknown deployment' });
-    store.deleteDeployment(req.params.id);
-    res.status(204).end();
-  });
-  app.post('/api/fleet/runs/:runId/retry', (req, res) => {
-    const r = store.getRun(req.params.runId);
+  }));
+  app.post('/api/fleet/runs/:runId/retry', ah(async (req, res) => {
+    const r = await store.getRun(req.params.runId);
     if (!r) return res.status(404).json({ error: 'unknown run' });
     if (r.status !== 'failed') return res.status(400).json({ error: 'only failed runs can be retried' });
     app.locals.worker.queue(r.deploymentId, 'retry', r.id).catch(() => {});
     res.status(202).json({ queued: true, retryOf: r.id });
-  });
+  }));
   return app;
 }
 module.exports = { buildApp, basicAuth };

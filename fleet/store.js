@@ -92,4 +92,88 @@ function createStore(file) {
     runsForDeployment: (deploymentId) => data.runs.filter(x => x.deploymentId === deploymentId).sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || '')),
   };
 }
-module.exports = { createStore };
+module.exports = { createStore, createPgStore };
+
+function createPgStore(url, importFile) {
+  const { Pool } = require('pg');
+  const pool = new Pool({ connectionString: url });
+  let ready = null;
+  function ensureReady() {
+    if (!ready) ready = init();
+    return ready;
+  }
+  async function init() {
+    await pool.query('CREATE TABLE IF NOT EXISTS fleet_docs (kind TEXT NOT NULL, id TEXT NOT NULL, data JSONB NOT NULL, PRIMARY KEY (kind, id))');
+    const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM fleet_docs');
+    if (rows[0].n === 0 && importFile && importFile !== ':memory:') {
+      const seed = loadFile(importFile);
+      if (seed && typeof seed === 'object') {
+        for (const kind of ['products', 'hosts', 'deployments', 'targets', 'runs']) {
+          for (const doc of (Array.isArray(seed[kind]) ? seed[kind] : [])) {
+            if (doc && doc.id) await pool.query('INSERT INTO fleet_docs (kind, id, data) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [kind, doc.id, doc]);
+          }
+        }
+      }
+    }
+    await ensureTargetsPg();
+    // Backfill target domains from existing bindings (same as file store)
+    const deployments = await all('deployments');
+    for (const d of deployments) {
+      const t = await get('targets', d.targetId || d.vdsId);
+      if (t && !t.domain && d.domain) await put('targets', { ...t, domain: d.domain });
+    }
+  }
+  async function all(kind) {
+    await ensureReady();
+    const { rows } = await pool.query('SELECT data FROM fleet_docs WHERE kind = $1', [kind]);
+    return rows.map(r => r.data);
+  }
+  async function get(kind, id) {
+    await ensureReady();
+    const { rows } = await pool.query('SELECT data FROM fleet_docs WHERE kind = $1 AND id = $2', [kind, id]);
+    return rows[0] ? rows[0].data : undefined;
+  }
+  async function put(kind, doc) {
+    await ensureReady();
+    await pool.query('INSERT INTO fleet_docs (kind, id, data) VALUES ($1, $2, $3) ON CONFLICT (kind, id) DO UPDATE SET data = EXCLUDED.data', [kind, doc.id, doc]);
+    return doc;
+  }
+  async function del(kind, id) {
+    await ensureReady();
+    await pool.query('DELETE FROM fleet_docs WHERE kind = $1 AND id = $2', [kind, id]);
+  }
+  async function ensureTargetsPg() {
+    const [hosts, targets] = await Promise.all([all('hosts'), all('targets')]);
+    for (const h of hosts) {
+      if (!targets.some(t => t.migratedFromHostId === h.id)) {
+        await put('targets', { id: h.id, kind: 'vds', name: h.name, ip: h.ip, sshUser: h.sshUser, sshKeyPath: h.sshKeyPath, providerLabel: h.providerLabel, migratedFromHostId: h.id });
+      }
+    }
+  }
+  return {
+    listProducts: () => all('products'),
+    getProduct: (id) => get('products', id),
+    saveProduct: (p) => put('products', withBuildDefaults({ ...p, id: p.id || newId('p') })),
+    deleteProduct: (id) => del('products', id),
+    listHosts: () => all('hosts'),
+    getHost: (id) => get('hosts', id),
+    saveHost: async (h) => { const r = await put('hosts', { ...h, id: h.id || newId('h') }); await ensureTargetsPg(); return r; },
+    listTargets: () => all('targets'),
+    getTarget: (id) => get('targets', id),
+    saveTarget: (t) => {
+      t = stripKeyMaterial({ ...t });
+      if (!ALLOWED_KINDS.includes(t.kind)) throw new Error('Invalid target kind: ' + t.kind);
+      return put('targets', { ...t, id: t.id || newId('t') });
+    },
+    deleteTarget: (id) => del('targets', id),
+    migrateHostsToTargets: async () => { await ensureTargetsPg(); return all('targets'); },
+    listDeployments: () => all('deployments'),
+    getDeployment: (id) => get('deployments', id),
+    saveDeployment: (d) => put('deployments', { ...d, id: d.id || newId('d') }),
+    deleteDeployment: (id) => del('deployments', id),
+    listRuns: () => all('runs'),
+    getRun: (id) => get('runs', id),
+    saveRun: (r) => put('runs', { ...r, id: r.id || newId('r'), startedAt: r.startedAt || new Date().toISOString() }),
+    runsForDeployment: async (deploymentId) => (await all('runs')).filter(x => x.deploymentId === deploymentId).sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || '')),
+  };
+}

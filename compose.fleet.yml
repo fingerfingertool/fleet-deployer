@@ -1,4 +1,19 @@
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: fleet-db
+    environment:
+      POSTGRES_DB: fleet
+      POSTGRES_USER: fleet
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - fleet-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fleet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
   fleet:
     build:
       context: .
@@ -10,6 +25,10 @@ services:
     environment:
       FLEET_PORT: 3100
       FLEET_DB: /app/data/fleet.json
+      DATABASE_URL: postgres://fleet:${POSTGRES_PASSWORD}@db:5432/fleet
+    depends_on:
+      db:
+        condition: service_healthy
     env_file:
       - fleet.env
     volumes:
@@ -19,3 +38,4 @@ services:
 
 volumes:
   fleet-data:
+  fleet-db:

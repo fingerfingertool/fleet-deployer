@@ -24,9 +24,9 @@ function coded(code, message) {
 //   process.env['FTP_PASS_' + targetId]
 // (documented here; never stored in DB or logs).
 async function runSteps({ store, deployment, run }, log = () => {}) {
-  const product = store.getProduct(deployment.productId);
+  const product = await store.getProduct(deployment.productId);
   if (!product) throw coded('clone-failed', 'unknown product');
-  const target = store.getTarget(deployment.targetId || deployment.vdsId);
+  const target = await store.getTarget(deployment.targetId || deployment.vdsId);
   if (!target) throw coded('upload-failed', 'unknown target');
   if (!target.remoteDir) throw coded('upload-failed', 'target missing remoteDir');
   const dir = `/tmp/fleet-build-${run.id}`;

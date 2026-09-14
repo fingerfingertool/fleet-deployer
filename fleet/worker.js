@@ -8,10 +8,10 @@ function createWorker(store, opts = {}) {
     run.logTail = ((run.logTail || '') + String(chunk)).slice(-204800);
   }
   async function execute(deploymentId, trigger, retryOf) {
-    const d = store.listDeployments().find(x => x.id === deploymentId);
+    const d = (await store.listDeployments()).find(x => x.id === deploymentId);
     if (!d) throw new Error('unknown deployment');
-    const run = store.saveRun({ deploymentId, trigger, branch: d.branch, status: 'running', retryOf });
-    d.status = 'running'; store.saveDeployment(d); emit({ type: 'run-started', run });
+    const run = await store.saveRun({ deploymentId, trigger, branch: d.branch, status: 'running', retryOf });
+    d.status = 'running'; await store.saveDeployment(d); emit({ type: 'run-started', run });
     try {
       const steps = opts.runSteps || require('./workerSteps').runSteps;
       const out = await steps({ store, deployment: d, run }, (c) => appendLog(run, c));
@@ -26,7 +26,7 @@ function createWorker(store, opts = {}) {
     } finally {
       run.finishedAt = new Date().toISOString();
       if (run.logTail) run.logTail = redactSecrets(run.logTail).slice(-204800);
-      store.saveRun(run); store.saveDeployment(d); emit({ type: 'run-finished', run });
+      await store.saveRun(run); await store.saveDeployment(d); emit({ type: 'run-finished', run });
     }
     return store.getRun(run.id);
   }
@@ -43,11 +43,11 @@ function createWorker(store, opts = {}) {
   return {
     onEvent: (fn) => listeners.push(fn),
     queueLength: (targetId) => (queues.get(targetId) || []).length + (running.has(targetId) ? 1 : 0),
-    queue(deploymentId, trigger = 'manual', retryOf) {
-      const d = store.listDeployments().find(x => x.id === deploymentId);
-      if (!d) throw new Error('unknown deployment');
-      const tid = d.targetId || d.vdsId;
-      d.status = 'queued'; store.saveDeployment(d);
+    async queue(deploymentId, trigger = 'manual', retryOf) {
+      const found = (await store.listDeployments()).find(x => x.id === deploymentId);
+      if (!found) throw new Error('unknown deployment');
+      const tid = found.targetId || found.vdsId;
+      found.status = 'queued'; await store.saveDeployment(found);
       return new Promise((resolve, reject) => {
         const q = queues.get(tid) || [];
         q.push({ deploymentId, trigger, retryOf, resolve, reject });
