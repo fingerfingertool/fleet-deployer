@@ -96,7 +96,7 @@ module.exports = { createStore, createPgStore };
 
 function createPgStore(url, importFile) {
   const { Pool } = require('pg');
-  const pool = new Pool({ connectionString: url });
+  const pool = url ? new Pool({ connectionString: url }) : new Pool();
   let ready = null;
   function ensureReady() {
     if (!ready) ready = init();

@@ -23,7 +23,8 @@ function basicAuth(req, res, next) {
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 function buildApp(file) {
   const dbFile = file || 'fleet.json';
-  const store = process.env.DATABASE_URL ? createPgStore(process.env.DATABASE_URL, dbFile) : createStore(dbFile);
+  const usePg = process.env.DATABASE_URL || process.env.PGHOST;
+  const store = usePg ? createPgStore(process.env.DATABASE_URL, dbFile) : createStore(dbFile);
   const app = express();
   app.use('/api/fleet/webhooks/github', express.raw({ type: 'application/json' }));
   app.use(express.json());
