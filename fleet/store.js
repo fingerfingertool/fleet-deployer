@@ -115,12 +115,23 @@ function createPgStore(url, importFile) {
         }
       }
     }
-    await ensureTargetsPg();
+    // Raw queries here (NOT the wrapped helpers — those await ready and would deadlock init)
+    const hosts = (await pool.query('SELECT data FROM fleet_docs WHERE kind = $1', ['hosts'])).rows.map(r => r.data);
+    const existing = (await pool.query('SELECT data FROM fleet_docs WHERE kind = $1', ['targets'])).rows.map(r => r.data);
+    for (const h of hosts) {
+      if (!existing.some(t => t.migratedFromHostId === h.id)) {
+        await pool.query('INSERT INTO fleet_docs (kind, id, data) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+          ['targets', h.id, { id: h.id, kind: 'vds', name: h.name, ip: h.ip, sshUser: h.sshUser, sshKeyPath: h.sshKeyPath, providerLabel: h.providerLabel, migratedFromHostId: h.id }]);
+      }
+    }
     // Backfill target domains from existing bindings (same as file store)
-    const deployments = await all('deployments');
+    const deployments = (await pool.query('SELECT data FROM fleet_docs WHERE kind = $1', ['deployments'])).rows.map(r => r.data);
     for (const d of deployments) {
-      const t = await get('targets', d.targetId || d.vdsId);
-      if (t && !t.domain && d.domain) await put('targets', { ...t, domain: d.domain });
+      const tid = d.targetId || d.vdsId;
+      const found = (await pool.query('SELECT data FROM fleet_docs WHERE kind = $1 AND id = $2', ['targets', tid])).rows[0];
+      if (found && found.data && !found.data.domain && d.domain) {
+        await pool.query('UPDATE fleet_docs SET data = $1 WHERE kind = $2 AND id = $3', [{ ...found.data, domain: d.domain }, 'targets', tid]);
+      }
     }
   }
   async function all(kind) {
