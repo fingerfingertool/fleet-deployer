@@ -112,6 +112,8 @@ async function runSteps({ store, deployment, run }, log = () => {}) {
             // upload sourceDir contents (idempotent: re-run overwrites)
             const items = fs.existsSync(sourceDir) ? fs.readdirSync(sourceDir) : [];
             for (const item of items) {
+              // Never publish VCS metadata, hidden files, or repo deploy scripts
+              if (item === '.git' || item.startsWith('.') || item === 'deploy-ftp.py') continue;
               if ((plan.exclude || []).some((pat) => {
                 if (pat.startsWith('*.')) return item.endsWith(pat.slice(1));
                 return item === pat;
