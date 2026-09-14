@@ -202,9 +202,10 @@ function renderFleet(){
 function renderBindings(){
   const el=$('#bindTable'); if(!el) return;
   if(!DB.deps.length){el.innerHTML=`<div class="empty"><p>No bindings yet. Pick a product and a host below.</p></div>`;return}
-  el.innerHTML=`<table><thead><tr><th>Product</th><th>Branch</th><th>Host</th><th>Domain</th><th></th></tr></thead><tbody>`+
+  el.innerHTML=`<table><thead><tr><th>Product</th><th>Target</th><th></th></tr></thead><tbody>`+
     DB.deps.map(d=>{const p=DB.products.find(x=>x.id===d.productId),t=DB.targets.find(x=>x.id===(d.targetId||d.vdsId));
-    return `<tr><td><b>${p?p.name:'?'}</b></td><td class="mono">${d.branch||''}</td><td>${t?t.name:''}</td><td>${d.domain?`<a href="https://${d.domain}" target="_blank" rel="noopener">${d.domain}</a>`:'—'}</td><td><button class="btn ghost small" data-edit-bind="${d.id}">Edit</button> <button class="btn small" data-deploy="${d.id}">Deploy</button> <button class="btn ghost small" data-unbind="${d.id}">Unbind</button></td></tr>`}).join('')+`</tbody></table>`;
+    const tcell=d&&d.domain&&t?`<a href="https://${d.domain}" target="_blank" rel="noopener">${t.name}</a>`:(t?t.name:'?');
+    return `<tr><td><b>${p?p.name:'?'}</b></td><td>${tcell}</td><td><button class="btn ghost small" data-edit-bind="${d.id}">Edit</button> <button class="btn small" data-deploy="${d.id}">Deploy</button> <button class="btn ghost small" data-unbind="${d.id}">Unbind</button></td></tr>`}).join('')+`</tbody></table>`;
   el.querySelectorAll('[data-deploy]').forEach(b=>b.onclick=async()=>{
     const r=await fetch('/api/fleet/deployments/'+b.dataset.deploy+'/deploy',{method:'POST'});
     r.ok?(toast('Deploy queued — see Deployments.'),refresh()):toast('Could not queue.');
@@ -213,7 +214,7 @@ function renderBindings(){
     const d=DB.deps.find(x=>x.id===b.dataset.editBind);if(!d)return;
     const row=b.closest('tr');
     row.cells[0].innerHTML=`<select id="eProd">${DB.products.map(p=>`<option value="${p.id}"${p.id===d.productId?' selected':''}>${p.name} · ${p.defaultBranch||'main'}</option>`).join('')}</select>`;
-    row.cells[2].innerHTML=`<select id="eTarg">${DB.targets.map(t=>`<option value="${t.id}"${t.id===(d.targetId||d.vdsId)?' selected':''}>${t.name} · ${t.domain||t.kind}</option>`).join('')}</select>`;
+    row.cells[1].innerHTML=`<select id="eTarg">${DB.targets.map(t=>`<option value="${t.id}"${t.id===(d.targetId||d.vdsId)?' selected':''}>${t.name} · ${t.domain||t.kind}</option>`).join('')}</select>`;
     b.outerHTML=`<button class="btn small" id="eBindSave">Save</button>`;
     $('#eBindSave').onclick=async()=>{
       const r=await fetch('/api/fleet/deployments/'+d.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({productId:$('#eProd').value,targetId:$('#eTarg').value})});
