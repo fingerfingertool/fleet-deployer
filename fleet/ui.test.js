@@ -68,3 +68,8 @@ test('targets table has inline edit with all fields', () => {
   expect(html).toMatch('eTKind');
   expect(html).toMatch('eTDom');
 });
+test('history prefers run snapshot; page auto-refreshes when idle', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('r.productId');
+  expect(html).toMatch('setInterval');
+});

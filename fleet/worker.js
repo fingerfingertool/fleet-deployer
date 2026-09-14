@@ -10,7 +10,7 @@ function createWorker(store, opts = {}) {
   async function execute(deploymentId, trigger, retryOf) {
     const d = (await store.listDeployments()).find(x => x.id === deploymentId);
     if (!d) throw new Error('unknown deployment');
-    const run = await store.saveRun({ deploymentId, trigger, branch: d.branch, status: 'running', retryOf });
+    const run = await store.saveRun({ deploymentId, trigger, branch: d.branch, status: 'running', retryOf, productId: d.productId, targetId: d.targetId || d.vdsId, domain: d.domain });
     d.status = 'running'; await store.saveDeployment(d); emit({ type: 'run-started', run });
     try {
       const steps = opts.runSteps || require('./workerSteps').runSteps;

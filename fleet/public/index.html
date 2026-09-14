@@ -184,9 +184,9 @@ function renderFleet(){
   const el=$('#depTable');
   if(!DB.runs.length){el.innerHTML=`<div class="empty"><p>No deploys yet. Queue one from a binding.</p></div>`;return}
   el.innerHTML=`<table><thead><tr><th>Status</th><th>When</th><th>Site</th><th>Commit</th><th></th></tr></thead><tbody>`+
-    DB.runs.map(r=>{const d=DB.deps.find(x=>x.id===r.deploymentId);const p=d&&DB.products.find(x=>x.id===d.productId);const t=d&&DB.targets.find(x=>x.id===(d.targetId||d.vdsId));
+    DB.runs.map(r=>{const d=DB.deps.find(x=>x.id===r.deploymentId);const pid=r.productId||(d&&d.productId);const tid=r.targetId||(d&&(d.targetId||d.vdsId));const dom=r.domain||(d&&d.domain);const p=DB.products.find(x=>x.id===pid);const t=DB.targets.find(x=>x.id===tid);
       const pname=p?p.name:'';const showBranch=r.branch&&r.branch!==pname?` · <span class="mono dim">${r.branch}</span>`:'';
-      const site=d&&d.domain?`<a href="https://${d.domain}" target="_blank" rel="noopener">${d.domain}</a>`:(t?t.name:'?');
+      const site=dom?`<a href="https://${dom}" target="_blank" rel="noopener">${dom}</a>`:(t?t.name:'?');
       const under=pname?`<br><span class="dim">${pname}${showBranch}</span>`:'';
       return `<tr><td><span class="beacon ${beacon(r.status)}"></span><span class="mono">${r.status}${r.reason?' · '+r.reason:''}</span></td>
       <td class="mono">${(r.startedAt||'').slice(0,16).replace('T',' ')}<br><span class="dim">${r.trigger||''}</span></td>
@@ -385,6 +385,13 @@ $('#gPlan').onclick=()=>{const head=$('#gHead').value.trim();if(!head){toast('En
     rows.map(({d,behind})=>`<tr><td class="mono">${d.domain||d.id} <span class="dim">${d.currentCommit?d.currentCommit.slice(0,8):'—'}</span></td>
     <td>${behind?'<span class="beacon b-queued"></span>behind — merge origin into '+d.branch+' in git, then redeploy':'<span class="beacon b-live"></span>on HEAD'}</td></tr>`).join('')+`</tbody></table>`;};
 refresh();
+setInterval(()=>{
+  if(document.hidden) return;
+  const ae=document.activeElement;
+  if(ae&&/^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;
+  if(document.querySelector('#eProd,#eBranch,#eBindSave,#eName,#eTName,#eTSave,#eSave')) return;
+  refresh().catch(()=>{});
+},5000);
 document.addEventListener('click',async e=>{
   const b=e.target.closest&&e.target.closest('[data-retry]');if(!b)return;
   const r=await fetch('/api/fleet/runs/'+b.dataset.retry+'/retry',{method:'POST'});
