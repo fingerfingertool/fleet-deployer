@@ -264,7 +264,30 @@ function renderTargets(){
   if(!DB.targets.length){el.innerHTML=`<div class="empty"><p>No targets yet. Add a VDS or static-sftp target below.</p></div>`;return}
   el.innerHTML=`<table><thead><tr><th>Target</th><th>Kind</th><th>Connection</th><th>Link</th><th></th></tr></thead><tbody>`+
     DB.targets.map(t=>{const link=t.domain?`<a href="https://${t.domain}" target="_blank" rel="noopener">${t.domain}</a>`:'<span class="dim">—</span>';
-    return `<tr><td><b>${t.name}</b></td><td><span class="mono kind kind-${t.kind}">${t.kind}</span></td><td class="mono dim">${t.kind==='static-sftp'?(t.host||'')+' · '+(t.remoteDir||''):((t.ip||'')+' · '+(t.sshUser||''))}</td><td>${link}</td><td><button class="btn ghost small" data-dup-target="${t.id}">Duplicate</button> <button class="btn ghost small" data-del-target="${t.id}">Delete</button></td></tr>`}).join('')+`</tbody></table>`;
+    return `<tr><td><b>${t.name}</b></td><td><span class="mono kind kind-${t.kind}">${t.kind}</span></td><td class="mono dim">${t.kind==='static-sftp'?(t.host||'')+' · '+(t.remoteDir||''):((t.ip||'')+' · '+(t.sshUser||''))}</td><td>${link}</td><td><button class="btn ghost small" data-edit-target="${t.id}">Edit</button> <button class="btn ghost small" data-dup-target="${t.id}">Duplicate</button> <button class="btn ghost small" data-del-target="${t.id}">Delete</button></td></tr>`}).join('')+`</tbody></table>`;
+  el.querySelectorAll('[data-edit-target]').forEach(b=>b.onclick=()=>{
+    const t=DB.targets.find(x=>x.id===b.dataset.editTarget);if(!t)return;
+    const row=b.closest('tr');
+    row.cells[0].innerHTML=`<input id="eTName" value="${t.name}" size="14">`;
+    row.cells[1].innerHTML=`<select id="eTKind"><option value="vds"${t.kind==='vds'?' selected':''}>vds</option><option value="static-sftp"${t.kind==='static-sftp'?' selected':''}>static-sftp</option></select>`;
+    row.cells[2].innerHTML=`<input id="eTDom" value="${t.domain||''}" placeholder="domain" size="20"><br><input id="eTIp" value="${t.ip||t.host||''}" placeholder="ip / sftp host" size="18"> <input id="eTUser" value="${t.sshUser||t.username||''}" placeholder="user" size="10"><br><input id="eTDir" value="${t.remoteDir||t.sshKeyPath||''}" placeholder="remote dir / key path" size="28">`;
+    row.cells[3].innerHTML='';
+    b.outerHTML=`<button class="btn small" id="eTSave">Save</button>`;
+    $('#eTSave').onclick=async()=>{
+      const kind=$('#eTKind').value;
+      const body=kind==='static-sftp'
+        ?{name:$('#eTName').value.trim(),kind,domain:$('#eTDom').value.trim(),host:$('#eTIp').value.trim(),username:$('#eTUser').value.trim(),remoteDir:$('#eTDir').value.trim()}
+        :{name:$('#eTName').value.trim(),kind,domain:$('#eTDom').value.trim(),ip:$('#eTIp').value.trim(),sshUser:$('#eTUser').value.trim()||'root',sshKeyPath:$('#eTDir').value.trim()||undefined};
+      document.querySelectorAll('#targetTable .bad').forEach(e=>e.classList.remove('bad'));
+      const r=await fetch('/api/fleet/targets/'+t.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(r.ok){toast('Target updated.');refresh();return}
+      const j=await r.json();
+      const fields={name:'#eTName',domain:'#eTDom',ip:'#eTIp',sshUser:'#eTUser',sshKeyPath:'#eTDir',host:'#eTIp',username:'#eTUser',remoteDir:'#eTDir',kind:'#eTKind'};
+      const sel=j.field&&fields[j.field];
+      if(sel){const elx=$(sel);elx.classList.add('bad');elx.focus()}
+      toast('Could not update — '+(j.field?j.field+': ':'')+(j.error||'unknown'));
+    };
+  });
   el.querySelectorAll('[data-dup-target]').forEach(b=>b.onclick=()=>{
     const t=DB.targets.find(x=>x.id===b.dataset.dupTarget);if(!t)return;
     $('#hKind').value=t.kind;$('#hKind').onchange({target:$('#hKind')});

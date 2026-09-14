@@ -62,3 +62,9 @@ test('targets form has single add button, duplicate, field highlight', () => {
   expect(html).toMatch('data-dup-target');
   expect(html).toMatch("input.bad");
 });
+test('targets table has inline edit with all fields', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('data-edit-target');
+  expect(html).toMatch('eTKind');
+  expect(html).toMatch('eTDom');
+});
