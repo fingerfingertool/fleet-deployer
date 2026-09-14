@@ -75,6 +75,11 @@ function buildApp(file) {
       if (command !== undefined) product.buildConfig.command = command;
       if (outputDir !== undefined) product.buildConfig.outputDir = outputDir;
     }
+    if (req.body.publish !== undefined) {
+      const pubErr = validatePublish(req.body.publish);
+      if (pubErr) return res.status(400).json({ error: pubErr });
+      product.publish = req.body.publish;
+    }
     res.status(201).json(await store.saveProduct(product));
   }));
   app.get('/api/fleet/products/:id/refs', ah(async (req, res) => {
@@ -135,16 +140,9 @@ function buildApp(file) {
       if (repoKeyPath) p.repoKeyPath = repoKeyPath; else delete p.repoKeyPath;
     }
     if (req.body.publish !== undefined) {
-      const pub = req.body.publish;
-      if (typeof pub !== 'object' || pub === null) return res.status(400).json({ error: 'invalid publish' });
-      if (pub.strategy !== undefined && pub.strategy !== 'ftp-static') return res.status(400).json({ error: 'unsupported publish strategy' });
-      for (const f of ['buildCommand', 'sourceDir']) {
-        if (pub[f] !== undefined && pub[f] !== null && (typeof pub[f] !== 'string' || pub[f].length > 256)) return res.status(400).json({ error: 'invalid publish.' + f });
-      }
-      for (const f of ['extraFiles', 'exclude']) {
-        if (pub[f] !== undefined && (!Array.isArray(pub[f]) || pub[f].some(x => typeof x !== 'string' || x.length > 256))) return res.status(400).json({ error: 'invalid publish.' + f });
-      }
-      p.publish = pub;
+      const pubErr = validatePublish(req.body.publish);
+      if (pubErr) return res.status(400).json({ error: pubErr });
+      p.publish = req.body.publish;
     }
     if (webhookSecretRef !== undefined) {
       if (typeof webhookSecretRef !== 'string' || webhookSecretRef.length > 128 || !/^[A-Z0-9_]+$/.test(webhookSecretRef)) return res.status(400).json({ error: 'invalid webhookSecretRef' });
@@ -175,6 +173,17 @@ function buildApp(file) {
     // Explicitly strip sshKey / privateKey even if present in body — never saved
     res.status(201).json(await store.saveHost(host));
   }));
+  function validatePublish(pub) {
+    if (typeof pub !== 'object' || pub === null) return 'invalid publish';
+    if (pub.strategy !== undefined && pub.strategy !== 'ftp-static') return 'unsupported publish strategy';
+    for (const f of ['buildCommand', 'sourceDir']) {
+      if (pub[f] !== undefined && pub[f] !== null && (typeof pub[f] !== 'string' || pub[f].length > 256)) return 'invalid publish.' + f;
+    }
+    for (const f of ['extraFiles', 'exclude']) {
+      if (pub[f] !== undefined && (!Array.isArray(pub[f]) || pub[f].some(x => typeof x !== 'string' || x.length > 256))) return 'invalid publish.' + f;
+    }
+    return null;
+  }
   function validateDomain(v) {
     if (typeof v !== 'string' || v.length === 0 || v.length > 253) return false;
     return v.split('.').every((l) => /^(?!-)[A-Za-z0-9-]{1,63}(?<!-)$/.test(l));

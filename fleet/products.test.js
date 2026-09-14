@@ -50,3 +50,12 @@ test('refs endpoint 404 on unknown product', async () => {
   const app = buildApp(':memory:');
   expect((await request(app).get('/api/fleet/products/nope/refs')).status).toBe(404);
 });
+test('POST accepts publish config', async () => {
+  const request = require('supertest');
+  const { buildApp } = require('./server');
+  const app = buildApp(':memory:');
+  const ok = await request(app).post('/api/fleet/products').send({ name: 's', gitUrl: 'https://x/y.git', publish: { strategy: 'ftp-static', sourceDir: '.' } });
+  expect(ok.status).toBe(201);
+  expect(ok.body.publish.sourceDir).toBe('.');
+  expect((await request(app).post('/api/fleet/products').send({ name: 't', gitUrl: 'https://x/y.git', publish: { strategy: 'nope' } })).status).toBe(400);
+});
