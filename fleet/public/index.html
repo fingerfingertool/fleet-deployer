@@ -240,7 +240,6 @@ function renderProducts(){
       cell.title=sha||'';
     }catch{ cell.textContent='—'; }
   });
-    :`<div class="empty"><p>No products yet. A product is just a repo — add yours below.</p></div>`;
   document.querySelectorAll('[data-del-product]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Delete this product?'))return;
     const r=await fetch('/api/fleet/products/'+b.dataset.delProduct,{method:'DELETE'});
