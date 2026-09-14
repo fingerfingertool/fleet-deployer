@@ -183,13 +183,14 @@ async function refresh(){
 function renderFleet(){
   const el=$('#depTable');
   if(!DB.runs.length){el.innerHTML=`<div class="empty"><p>No deploys yet. Queue one from a binding.</p></div>`;return}
-  el.innerHTML=`<table><thead><tr><th>Status</th><th>When</th><th>Product</th><th>Host</th><th>Trigger</th><th>Commit</th><th></th></tr></thead><tbody>`+
+  el.innerHTML=`<table><thead><tr><th>Status</th><th>When</th><th>Site</th><th>Commit</th><th></th></tr></thead><tbody>`+
     DB.runs.map(r=>{const d=DB.deps.find(x=>x.id===r.deploymentId);const p=d&&DB.products.find(x=>x.id===d.productId);const t=d&&DB.targets.find(x=>x.id===(d.targetId||d.vdsId));
+      const pname=p?p.name:'';const showBranch=r.branch&&r.branch!==pname?` · <span class="mono dim">${r.branch}</span>`:'';
+      const site=d&&d.domain?`<a href="https://${d.domain}" target="_blank" rel="noopener">${d.domain}</a>`:(t?t.name:'?');
+      const under=pname?`<br><span class="dim">${pname}${showBranch}</span>`:'';
       return `<tr><td><span class="beacon ${beacon(r.status)}"></span><span class="mono">${r.status}${r.reason?' · '+r.reason:''}</span></td>
-      <td class="mono dim">${(r.startedAt||'').slice(0,16).replace('T',' ')}</td>
-      <td><b>${p?p.name:'?'}</b> <span class="mono dim">${r.branch||''}</span></td>
-      <td class="mono">${t?t.name:''}${d&&d.domain?`<br><a href="https://${d.domain}" target="_blank" rel="noopener">${d.domain}</a>`:''}</td>
-      <td class="mono dim">${r.trigger||''}</td>
+      <td class="mono">${(r.startedAt||'').slice(0,16).replace('T',' ')}<br><span class="dim">${r.trigger||''}</span></td>
+      <td>${site}${under}</td>
       <td class="mono dim">${r.commitSha?r.commitSha.slice(0,8):'—'}</td>
       <td>${d?`<button class="btn ghost small" data-open="${d.id}">Open</button>`:''}${r.status==='failed'?` <button class="btn small" data-retry="${r.id}">Retry</button>`:''}</td></tr>`}).join('')+`</tbody></table>`;
   el.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.open));
