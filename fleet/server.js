@@ -35,7 +35,7 @@ function buildApp(file) {
     if (event !== 'push') return res.json({ ignored: true });
     const raw = req.body; // Buffer from express.raw
     const products = await store.listProducts();
-    const match = products.find(p => {
+    const matches = products.filter(p => {
       const ref = p.webhookSecretRef && process.env[p.webhookSecretRef];
       if (!ref) return false;
       const sig = crypto.createHmac('sha256', ref).update(raw).digest('hex');
@@ -43,15 +43,17 @@ function buildApp(file) {
       try { return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(got)); }
       catch { return false; }
     });
-    if (!match) return res.status(401).json({ error: 'bad signature' });
+    if (!matches.length) return res.status(401).json({ error: 'bad signature' });
     let payload; try { payload = JSON.parse(raw.toString('utf8')); } catch { return res.status(400).json({ error: 'bad payload' }); }
     const branch = (payload.ref || '').replace('refs/heads/', '');
     const urls = [payload.repository && payload.repository.clone_url, payload.repository && payload.repository.ssh_url].filter(Boolean);
     const queued = [];
+    for (const match of matches) {
     for (const d of (await store.listDeployments()).filter(x => x.productId === match.id && (match.defaultBranch || 'main') === branch)) {
       if (match.gitUrl && !urls.includes(match.gitUrl) && payload.repository && payload.repository.full_name && !match.gitUrl.includes(payload.repository.full_name)) continue;
       app.locals.worker.queue(d.id, 'webhook').catch(() => {});
       queued.push(d.id);
+    }
     }
     res.json({ queued });
   }));
