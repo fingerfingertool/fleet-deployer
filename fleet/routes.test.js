@@ -124,3 +124,16 @@ test('target validation errors carry field', async () => {
   expect(r.status).toBe(400);
   expect(r.body.field).toBe('host');
 });
+test('edit binding target, conflict rejected', async () => {
+  const app = buildApp(':memory:');
+  const p = (await request(app).post('/api/fleet/products').send({ name: 'a', gitUrl: 'https://x/y.git', defaultBranch: 'main' })).body;
+  const t1 = (await request(app).post('/api/fleet/targets').send({ name: 'v1', kind: 'vds', ip: '1.2.3.4', sshUser: 'root', domain: 'a.example.com' })).body;
+  const t2 = (await request(app).post('/api/fleet/targets').send({ name: 'v2', kind: 'vds', ip: '1.2.3.5', sshUser: 'root', domain: 'b.example.com' })).body;
+  const d1 = (await request(app).post('/api/fleet/deployments').send({ productId: p.id, targetId: t1.id })).body;
+  await request(app).post('/api/fleet/deployments').send({ productId: p.id, targetId: t2.id });
+  expect((await request(app).put('/api/fleet/deployments/' + d1.id).send({ targetId: t2.id })).status).toBe(409);
+  const u = await request(app).put('/api/fleet/deployments/' + d1.id).send({ targetId: t1.id });
+  expect(u.status).toBe(200);
+  expect(u.body.domain).toBe('a.example.com');
+  expect((await request(app).put('/api/fleet/deployments/' + d1.id).send({ targetId: 'nope' })).status).toBe(400);
+});

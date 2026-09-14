@@ -283,6 +283,13 @@ function buildApp(file) {
       d.productId = p.id;
       d.branch = p.defaultBranch || 'main';
     }
+    if (req.body.targetId !== undefined) {
+      const t = (await store.getTarget(req.body.targetId)) || (await store.getHost(req.body.targetId));
+      if (!t) return res.status(400).json({ error: 'unknown target' });
+      if (!t.domain) return res.status(400).json({ error: 'target has no domain' });
+      if ((await store.listDeployments()).some(x => x.id !== d.id && (x.targetId || x.vdsId) === t.id)) return res.status(409).json({ error: 'target already bound' });
+      d.targetId = t.id; d.vdsId = t.id; d.domain = t.domain;
+    }
     res.json(await store.saveDeployment(d));
   }));
   app.delete('/api/fleet/deployments/:id', ah(async (req, res) => {
