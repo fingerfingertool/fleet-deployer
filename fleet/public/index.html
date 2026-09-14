@@ -228,8 +228,18 @@ function renderBindings(){
   });
 }
 function renderProducts(){
-  $('#prodTable').innerHTML=DB.products.length?`<table><thead><tr><th>Product</th><th>Default branch</th><th></th></tr></thead><tbody>`+
-    DB.products.map(p=>`<tr><td><b>${p.name}</b></td><td class="mono">${p.defaultBranch||'main'}</td><td><button class="btn ghost small" data-edit-product="${p.id}">Edit</button> <button class="btn ghost small" data-del-product="${p.id}">Delete</button></td></tr>`).join('')+`</tbody></table>`
+  $('#prodTable').innerHTML=DB.products.length?`<table><thead><tr><th>Product</th><th>Default branch</th><th>HEAD</th><th></th></tr></thead><tbody>`+
+    DB.products.map(p=>`<tr><td><b>${p.name}</b></td><td class="mono">${p.defaultBranch||'main'}</td><td class="mono dim" data-head="${p.id}">…</td><td><button class="btn ghost small" data-edit-product="${p.id}">Edit</button> <button class="btn ghost small" data-del-product="${p.id}">Delete</button></td></tr>`).join('')+`</tbody></table>`
+    :`<div class="empty"><p>No products yet. A product is just a repo — add yours below.</p></div>`;
+  document.querySelectorAll('[data-head]').forEach(async cell=>{
+    try{
+      const refs=await api.get('/api/fleet/products/'+cell.dataset.head+'/refs');
+      const p=DB.products.find(x=>x.id===cell.dataset.head);
+      const sha=refs.refs&&refs.refs[p.defaultBranch||'main'];
+      cell.textContent=sha?sha.slice(0,8):'—';
+      cell.title=sha||'';
+    }catch{ cell.textContent='—'; }
+  });
     :`<div class="empty"><p>No products yet. A product is just a repo — add yours below.</p></div>`;
   document.querySelectorAll('[data-del-product]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Delete this product?'))return;

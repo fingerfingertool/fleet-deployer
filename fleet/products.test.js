@@ -44,3 +44,9 @@ test('POST accepts repoKeyPath, rejects overlong', async () => {
   expect(ok.body.repoKeyPath).toBe('/app/keys/x');
   expect((await request(app).post('/api/fleet/products').send({ name: 't', gitUrl: 'https://x/y.git', repoKeyPath: 'x'.repeat(513) })).status).toBe(400);
 });
+test('refs endpoint 404 on unknown product', async () => {
+  const request = require('supertest');
+  const { buildApp } = require('./server');
+  const app = buildApp(':memory:');
+  expect((await request(app).get('/api/fleet/products/nope/refs')).status).toBe(404);
+});

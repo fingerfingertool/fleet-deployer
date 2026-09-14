@@ -77,6 +77,25 @@ function buildApp(file) {
     }
     res.status(201).json(await store.saveProduct(product));
   }));
+  app.get('/api/fleet/products/:id/refs', ah(async (req, res) => {
+    const p = await store.getProduct(req.params.id);
+    if (!p) return res.status(404).json({ error: 'unknown product' });
+    const { execFile } = require('child_process');
+    const env = { ...process.env };
+    if (p.repoKeyPath) {
+      if (typeof p.repoKeyPath !== 'string' || p.repoKeyPath.length > 512) return res.status(400).json({ error: 'invalid repoKeyPath' });
+      env.GIT_SSH_COMMAND = `ssh -i ${p.repoKeyPath} -o StrictHostKeyChecking=no -o BatchMode=yes`;
+    }
+    execFile('git', ['ls-remote', '--heads', p.gitUrl], { env, timeout: 20000 }, (err, stdout) => {
+      if (err) return res.status(502).json({ error: 'could not list refs' });
+      const refs = {};
+      for (const l of stdout.split('\n').filter(Boolean)) {
+        const [sha, ref] = l.split('	');
+        if (sha && ref) refs[ref.replace('refs/heads/', '')] = sha;
+      }
+      res.json({ refs });
+    });
+  }));
   app.get('/api/fleet/products/:id/branches', ah(async (req, res) => {
     const p = await store.getProduct(req.params.id);
     if (!p) return res.status(404).json({ error: 'unknown product' });
