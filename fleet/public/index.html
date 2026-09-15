@@ -219,14 +219,23 @@ function renderProducts(){
     const claimed=t?`<span class="mono">${t.name}</span>`:'<span class="dim">—</span>';
     return `<tr><td><b>${p.name}</b><br><span class="dim mono" style="font-size:12px">${p.gitUrl||''}</span></td><td class="mono">${p.defaultBranch||'main'}</td><td class="mono dim" data-head="${p.id}">…</td><td>${claimed}</td><td><button class="btn ghost small" data-edit-product="${p.id}">Edit</button> <button class="btn ghost small" data-del-product="${p.id}">Delete</button></td></tr>`}).join('')+`</tbody></table>`
     :`<div class="empty"><p>No products yet. A product is just a repo — add yours below.</p></div>`;
-  document.querySelectorAll('[data-head]').forEach(async cell=>{
-    try{
-      const refs=await api.get('/api/fleet/products/'+cell.dataset.head+'/refs');
-      const p=DB.products.find(x=>x.id===cell.dataset.head);
-      const sha=refs.refs&&refs.refs[p.defaultBranch||'main'];
-      cell.textContent=sha?sha.slice(0,8):'—';
+  document.querySelectorAll('[data-head]').forEach(cell=>{
+    const pid=cell.dataset.head;
+    const paint=()=>{
+      const p=DB.products.find(x=>x.id===pid);
+      const sha=DB.heads&&DB.heads[pid]&&DB.heads[pid][p.defaultBranch||'main'];
+      cell.textContent=sha?sha.slice(0,8):'…';
       cell.title=sha||'';
-    }catch{ cell.textContent='—'; }
+    };
+    paint();
+    if(!DB.heads||!DB.heads[pid]||Date.now()-DB.heads[pid].at>60000){
+      api.get('/api/fleet/products/'+pid+'/refs').then(refs=>{
+        const p=DB.products.find(x=>x.id===pid);
+        DB.heads=DB.heads||{};
+        DB.heads[pid]={...(refs.refs||{}),at:Date.now()};
+        if(document.body.contains(cell)) paint();
+      }).catch(()=>{});
+    }
   });
   document.querySelectorAll('[data-del-product]').forEach(b=>b.onclick=async()=>{
     if(!confirm('Delete this product?'))return;
