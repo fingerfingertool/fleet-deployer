@@ -217,7 +217,7 @@ function renderProducts(){
   $('#prodTable').innerHTML=DB.products.length?`<table><thead><tr><th>Product</th><th>Default branch</th><th>HEAD</th><th>Claimed</th><th></th></tr></thead><tbody>`+
     DB.products.map(p=>{const dep=DB.deps.find(d=>d.productId===p.id);const t=dep&&DB.targets.find(x=>x.id===(dep.targetId||dep.vdsId));
     const claimed=t?`<span class="mono">${t.name}</span>`:'<span class="dim">—</span>';
-    return `<tr><td><b>${p.name}</b></td><td class="mono">${p.defaultBranch||'main'}</td><td class="mono dim" data-head="${p.id}">…</td><td>${claimed}</td><td><button class="btn ghost small" data-edit-product="${p.id}">Edit</button> <button class="btn ghost small" data-del-product="${p.id}">Delete</button></td></tr>`}).join('')+`</tbody></table>`
+    return `<tr><td><b>${p.name}</b><br><span class="dim mono" style="font-size:12px">${p.gitUrl||''}</span></td><td class="mono">${p.defaultBranch||'main'}</td><td class="mono dim" data-head="${p.id}">…</td><td>${claimed}</td><td><button class="btn ghost small" data-edit-product="${p.id}">Edit</button> <button class="btn ghost small" data-del-product="${p.id}">Delete</button></td></tr>`}).join('')+`</tbody></table>`
     :`<div class="empty"><p>No products yet. A product is just a repo — add yours below.</p></div>`;
   document.querySelectorAll('[data-head]').forEach(async cell=>{
     try{
