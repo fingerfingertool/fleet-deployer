@@ -59,3 +59,12 @@ test('POST accepts publish config', async () => {
   expect(ok.body.publish.sourceDir).toBe('.');
   expect((await request(app).post('/api/fleet/products').send({ name: 't', gitUrl: 'https://x/y.git', publish: { strategy: 'nope' } })).status).toBe(400);
 });
+test('POST accepts webhookSecretRef, rejects bad value', async () => {
+  const request = require('supertest');
+  const { buildApp } = require('./server');
+  const app = buildApp(':memory:');
+  const ok = await request(app).post('/api/fleet/products').send({ name: 's', gitUrl: 'https://x/y.git', webhookSecretRef: 'MY_HOOK' });
+  expect(ok.status).toBe(201);
+  expect(ok.body.webhookSecretRef).toBe('MY_HOOK');
+  expect((await request(app).post('/api/fleet/products').send({ name: 't', gitUrl: 'https://x/y.git', webhookSecretRef: 'bad!' })).status).toBe(400);
+});

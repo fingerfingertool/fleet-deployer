@@ -80,6 +80,10 @@ function buildApp(file) {
       if (pubErr) return res.status(400).json({ error: pubErr });
       product.publish = req.body.publish;
     }
+    if (req.body.webhookSecretRef !== undefined) {
+      if (typeof req.body.webhookSecretRef !== 'string' || req.body.webhookSecretRef.length > 128 || !/^[A-Z0-9_]+$/.test(req.body.webhookSecretRef)) return res.status(400).json({ error: 'invalid webhookSecretRef' });
+      product.webhookSecretRef = req.body.webhookSecretRef;
+    }
     res.status(201).json(await store.saveProduct(product));
   }));
   app.get('/api/fleet/products/:id/refs', ah(async (req, res) => {
