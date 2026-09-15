@@ -29,3 +29,24 @@ test('run snapshots binding so later edits do not rewrite history', async () => 
   expect(kept.productId).toBe(p.id);
   expect(kept.targetId).toBe(t.id);
 });
+test('missing source dir fails instead of empty live run', async () => {
+  const fs = require('fs');
+  const { execSync } = require('child_process');
+  const { createStore } = require('./store');
+  const { createWorker } = require('./worker');
+  const repo = '/tmp/opencode/empty-src-repo';
+  fs.rmSync(repo, { recursive: true, force: true });
+  fs.mkdirSync(repo, { recursive: true });
+  execSync('git init -q . && git config user.email t@t && git config user.name t && echo hi > index.html && git add -A && git commit -qm x', { cwd: repo });
+  const store = createStore(':memory:');
+  const p = await store.saveProduct({ name: 's', gitUrl: repo, publish: { strategy: 'ftp-static', sourceDir: 'public' } });
+  const t = await store.saveTarget({ name: 't', kind: 'static-sftp', host: 'h', username: 'u', remoteDir: '/d', domain: 'x.example.com' });
+  const d = await store.saveDeployment({ productId: p.id, branch: 'master', targetId: t.id, domain: 'x.example.com', status: 'draft' });
+  process.env.FTP_PASS_DEFAULT = 'test-only';
+  const w = createWorker(store, {});
+  const run = await w.queue(d.id, 'manual');
+  delete process.env.FTP_PASS_DEFAULT;
+  expect(run.status).toBe('failed');
+  expect(run.reason).toBe('build-failed');
+  expect(run.error).toMatch('source dir missing');
+}, 90000);

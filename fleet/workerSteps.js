@@ -76,6 +76,11 @@ async function runSteps({ store, deployment, run }, log = () => {}) {
     try {
       const password = process.env['FTP_PASS_' + target.id] || process.env.FTP_PASS_DEFAULT;
       if (!password) throw coded('auth-failed', `missing FTP credentials in vault for target ${target.name} (${target.id}): set FTP_PASS_${target.id} or FTP_PASS_DEFAULT`);
+      if (!target.remoteDir) throw coded('upload-failed', 'target missing remoteDir');
+      if (plan.mode !== 'script') {
+        const preDir = path.join(dir, plan.sourceDir || 'public');
+        if (!fs.existsSync(preDir)) throw coded('build-failed', `source dir missing in branch: ${plan.sourceDir || 'public'} (branch layout changed?)`);
+      }
       await client.access({
         host: target.host,
         user: target.username,
