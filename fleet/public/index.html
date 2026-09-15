@@ -97,7 +97,6 @@ input::placeholder{color:var(--faint)}
     <button data-tab="bindings" aria-current="false">Bindings</button>
     <button data-tab="products" aria-current="false">Products</button>
     <button data-tab="targets" aria-current="false">Targets</button>
-    <button data-tab="propagate" aria-current="false">Hotfix propagate</button>
     <div class="hint">Any branch is a reskin. Pick a product, a branch, a host, a domain — ship it.</div>
   </nav>
   <main>
@@ -147,15 +146,6 @@ input::placeholder{color:var(--faint)}
         <input id="sDom" placeholder="domain, e.g. site.example.com" size="24">
         <button class="btn" id="tAdd">Add target</button>
       </div>
-    </section>
-    <section id="tab-propagate" hidden>
-      <h2>Hotfix propagate</h2>
-      <p class="sub">Fix the origin branch, enter its new commit, and see which clones sit behind it. Merge happens in git — this table tells you where to look.</p>
-      <div class="row">
-        <input id="gHead" placeholder="origin HEAD commit, e.g. 9f3c…" size="30">
-        <button class="btn ghost" id="gPlan">Compare</button>
-      </div>
-      <div id="propTable"><div class="empty"><p>Enter a commit to compare the fleet against it.</p></div></div>
     </section>
   </main>
 </div>
@@ -372,7 +362,7 @@ $('#scrim').onclick=closeDrawer;
 document.querySelectorAll('.rail button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.rail button').forEach(x=>x.setAttribute('aria-current','false'));
   b.setAttribute('aria-current','true');
-  ['fleet','bindings','products','targets','propagate'].forEach(t=>$('#tab-'+t).hidden=t!==b.dataset.tab);
+  ['fleet','bindings','products','targets'].forEach(t=>{const s=$('#tab-'+t);if(s)s.hidden=t!==b.dataset.tab});
   try{localStorage.setItem('fleet-tab',b.dataset.tab)}catch{}
 });
 try{const last=localStorage.getItem('fleet-tab');if(last&&$('#tab-'+last))document.querySelector(`.rail button[data-tab="${last}"]`).click()}catch{}
@@ -392,11 +382,6 @@ $('#tAdd').onclick=async()=>{
 };
 $('#fShip').onclick=async()=>{const tp=$('#targetPicker');const r=await api.post('/api/fleet/deployments',{productId:$('#fProduct').value,targetId:tp?tp.value:undefined,envValues:{}});
   r.ok?(toast('Product bound. Open it for the go-live checklist.'),refresh()):toast('Could not bind: '+(r.body.error||'unknown'));};
-$('#gPlan').onclick=()=>{const head=$('#gHead').value.trim();if(!head){toast('Enter the origin HEAD commit first.');return}
-  const rows=DB.deps.map(d=>({d,behind:d.currentCommit!==head}));
-  $('#propTable').innerHTML=`<table><thead><tr><th>Clone</th><th>Verdict</th></tr></thead><tbody>`+
-    rows.map(({d,behind})=>`<tr><td class="mono">${d.domain||d.id} <span class="dim">${d.currentCommit?d.currentCommit.slice(0,8):'—'}</span></td>
-    <td>${behind?'<span class="beacon b-queued"></span>behind — merge origin into '+d.branch+' in git, then redeploy':'<span class="beacon b-live"></span>on HEAD'}</td></tr>`).join('')+`</tbody></table>`;};
 refresh();
 setInterval(()=>{
   if(document.hidden) return;
