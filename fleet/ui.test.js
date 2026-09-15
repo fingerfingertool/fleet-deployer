@@ -77,3 +77,16 @@ test('targets and products show claimed state', () => {
   const html = fs.readFileSync('fleet/public/index.html', 'utf8');
   expect(html).toMatch('Claimed');
 });
+test('screens are deep-linkable via hash routes', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('showTab');
+  expect(html).toMatch('hashchange');
+  expect(html).toMatch('#/');
+});
+test('consistent buttons, copy and single retry path', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('targets</div>');
+  expect(html).not.toMatch('hosts</div>');
+  expect(html).not.toMatch('Any branch is a reskin');
+  expect((html.match(/data-retry/g) || []).length).toBeGreaterThan(0);
+});

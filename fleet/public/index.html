@@ -88,7 +88,7 @@ input::placeholder{color:var(--faint)}
   <div class="tally">
     <div class="t"><div class="n" id="tLive">–</div><div class="l">live</div></div>
     <div class="t"><div class="n" id="tShips">–</div><div class="l">deployments</div></div>
-    <div class="t"><div class="n" id="tHosts">–</div><div class="l">hosts</div></div>
+    <div class="t"><div class="n" id="tHosts">–</div><div class="l">targets</div></div>
   </div>
 </header>
 <div class="shell">
@@ -97,7 +97,7 @@ input::placeholder{color:var(--faint)}
     <button data-tab="bindings" aria-current="false">Bindings</button>
     <button data-tab="products" aria-current="false">Products</button>
     <button data-tab="targets" aria-current="false">Targets</button>
-    <div class="hint">Any branch is a reskin. Pick a product, a branch, a host, a domain — ship it.</div>
+    <div class="hint">A product (repo + branch) bound to a target (host + domain) — deploys itself.</div>
   </nav>
   <main>
     <section id="tab-fleet">
@@ -120,7 +120,7 @@ input::placeholder{color:var(--faint)}
     </section>
     <section id="tab-products" hidden>
       <h2>Products</h2>
-      <p class="sub">A product is a git repo with a Dockerfile or compose file. Branches become reskins at deploy time — nothing to configure per variant.</p>
+      <p class="sub">A product is a git repo pinned to a branch. Bind it to a target to ship it.</p>
       <div id="prodTable"></div>
       <div class="row">
         <input id="pName" placeholder="name, e.g. ecom-shop">
@@ -132,7 +132,7 @@ input::placeholder{color:var(--faint)}
     </section>
     <section id="tab-targets" hidden>
       <h2>Targets</h2>
-      <p class="sub">VDS or static-sftp. Add the target, point the domain yourself, then ship. Only key <em>paths</em> are stored — never key material.</p>
+      <p class="sub">VDS or static-sftp. Each target serves one domain. Only key <em>paths</em> are stored — never key material.</p>
       <div id="targetTable"></div>
       <div class="row">
         <input id="hName" placeholder="name, e.g. vds-hetzner-1">
@@ -184,10 +184,6 @@ function renderFleet(){
       <td class="mono dim">${r.commitSha?r.commitSha.slice(0,8):'—'}</td>
       <td>${d?`<button class="btn ghost small" data-open="${d.id}">Open</button>`:''}${r.status==='failed'?` <button class="btn small" data-retry="${r.id}">Retry</button>`:''}</td></tr>`}).join('')+`</tbody></table>`;
   el.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.open));
-  el.querySelectorAll('[data-retry]').forEach(b=>b.onclick=async()=>{
-    const r=await fetch('/api/fleet/runs/'+b.dataset.retry+'/retry',{method:'POST'});
-    r.ok?(toast('Retry queued.'),refresh()):toast('Could not retry.');
-  });
 }
 function renderBindings(){
   const el=$('#bindTable'); if(!el) return;
@@ -326,22 +322,22 @@ function checklistFor(kind,d,h){
       <li><b>4 · Verify</b>Health check must answer before the beacon turns green.</li>
     </ol>`;
   return `<ol class="check">
-      <li><b>1 · DNS</b>Point A-record <span class="mono">${d.domain||''}</span> → <span class="mono">${h?h.ip:''}</span> at your registrar.</li>
-      <li><b>2 · Ship</b>Panel clones <span class="mono">${d.branch||''}</span>, builds the image, starts the container.</li>
-      <li><b>3 · Secure</b>Caddy writes the vhost and fetches the certificate automatically.</li>
+      <li><b>1 · DNS</b>Point <span class="mono">${d.domain||''}</span> at the target before shipping.</li>
+      <li><b>2 · Ship</b>Panel clones <span class="mono">${d.branch||''}</span> and publishes the bundle.</li>
+      <li><b>3 · Secure</b>HTTPS is served by the host (cPanel AutoSSL or equivalent).</li>
       <li><b>4 · Verify</b>Health check must answer before the beacon turns green.</li>
     </ol>`;
 }
 async function renderHistory(deploymentId){
   const runs=await api.get('/api/fleet/deployments/'+deploymentId+'/runs');
-  return runs.map(r=>`<div class="mono">${r.startedAt||''} · ${r.trigger||''} · ${r.status}${r.reason?' · '+r.reason:''}${r.status==='failed'?` <button class="btn ghost small" data-retry="${r.id}">Retry</button>`:''}</div>`).join('')||'<p class="dim">No runs yet.</p>';
+  return runs.map(r=>`<div class="mono">${r.startedAt||''} · ${r.trigger||''} · ${r.status}${r.reason?' · '+r.reason:''}${r.status==='failed'?` <button class="btn small" data-retry="${r.id}">Retry</button>`:''}</div>`).join('')||'<p class="dim">No runs yet.</p>';
 }
 function openDrawer(id){
   const d=DB.deps.find(x=>x.id===id);if(!d)return;
   const p=DB.products.find(x=>x.id===d.productId),h=DB.hosts.find(x=>x.id===(d.vdsId||d.targetId)),t=DB.targets.find(x=>x.id===(d.targetId||d.vdsId));
   const kind=t?t.kind:'vds';
   $('#drawer').innerHTML=`<h3>${d.domain||'Untitled clone'}</h3>
-    <p class="dim mono">${p?p.name:''} · ${d.branch||''} → ${h?h.name+' ('+h.ip+')':''}</p>
+    <p class="dim mono">${p?p.name:''} · ${d.branch||''} → ${t?t.name:''}</p>
     <p><span class="beacon ${beacon(d.status)}"></span><span class="mono">${d.status||'draft'}</span>
     <span class="dim mono"> · ${d.currentCommit?d.currentCommit.slice(0,12):'no commit yet'}</span>${d.status==='queued'||d.status==='running'?`<span class="dim mono"> · queue${d.queuePosition!=null?' #'+d.queuePosition:''}</span>`:''}</p>
     ${checklistFor(kind,d,h)}
@@ -359,13 +355,18 @@ function openDrawer(id){
 }
 function closeDrawer(){$('#drawer').classList.remove('open');$('#scrim').classList.remove('open')}
 $('#scrim').onclick=closeDrawer;
-document.querySelectorAll('.rail button').forEach(b=>b.onclick=()=>{
+function showTab(name){
+  const btn=document.querySelector(`.rail button[data-tab="${name}"]`);
+  if(!btn||!$('#tab-'+name)) return false;
   document.querySelectorAll('.rail button').forEach(x=>x.setAttribute('aria-current','false'));
-  b.setAttribute('aria-current','true');
-  ['fleet','bindings','products','targets'].forEach(t=>{const s=$('#tab-'+t);if(s)s.hidden=t!==b.dataset.tab});
-  try{localStorage.setItem('fleet-tab',b.dataset.tab)}catch{}
-});
-try{const last=localStorage.getItem('fleet-tab');if(last&&$('#tab-'+last))document.querySelector(`.rail button[data-tab="${last}"]`).click()}catch{}
+  btn.setAttribute('aria-current','true');
+  ['fleet','bindings','products','targets'].forEach(t=>{const s=$('#tab-'+t);if(s)s.hidden=t!==name});
+  try{localStorage.setItem('fleet-tab',name)}catch{}
+  return true;
+}
+document.querySelectorAll('.rail button').forEach(b=>b.onclick=()=>{ showTab(b.dataset.tab); try{location.hash='#/'+b.dataset.tab}catch{} });
+window.addEventListener('hashchange',()=>{const h=(location.hash||'').replace(/^#\//,'');if(h)showTab(h)});
+try{const h=(location.hash||'').replace(/^#\//,'');if(h&&showTab(h)){}else{const last=localStorage.getItem('fleet-tab');if(last)showTab(last)}}catch{}
 $('#pAdd').onclick=async()=>{const r=await api.post('/api/fleet/products',{name:$('#pName').value.trim(),gitUrl:$('#pGit').value.trim(),defaultBranch:$('#pBranch').value.trim()||'main',repoKeyPath:$('#pKey').value.trim()||undefined});
   r.ok?(toast('Product added.'),refresh()):toast('Could not add: '+(r.body.error||'unknown'));};
 $('#hKind').onchange=e=>{const sftp=e.target.value==='static-sftp';$('#hIp').hidden=sftp;$('#hUser').hidden=sftp;$('#hKey').hidden=sftp;$('#sHost').hidden=!sftp;$('#sUser').hidden=!sftp;$('#sDir').hidden=!sftp;};
