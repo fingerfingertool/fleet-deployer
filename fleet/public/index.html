@@ -159,6 +159,17 @@ const $=s=>document.querySelector(s), api={
 };
 let DB={products:[],hosts:[],targets:[],deps:[],runs:[]};
 const beacon=s=>({live:'b-live',draft:'b-draft',failed:'b-failed',drifted:'b-drifted',running:'b-running',queued:'b-queued'}[s]||'b-draft');
+function timeAgo(iso){
+  if(!iso) return '—';
+  const t=new Date(iso).getTime(); if(Number.isNaN(t)) return '—';
+  const s=Math.floor((Date.now()-t)/1000);
+  if(s<5) return 'just now';
+  if(s<60) return `${s}s ago`;
+  const m=Math.floor(s/60); if(m<60) return `${m} min ago`;
+  const h=Math.floor(m/60); if(h<24) return `${h}h ago`;
+  const d=Math.floor(h/24); if(d<7) return `${d}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',3200)}
 async function refresh(){
   [DB.products,DB.hosts,DB.targets,DB.deps,DB.runs]=await Promise.all([api.get('/api/fleet/products'),api.get('/api/fleet/hosts'),api.get('/api/fleet/targets'),api.get('/api/fleet/deployments'),api.get('/api/fleet/runs')]);
@@ -175,15 +186,16 @@ function renderFleet(){
   if(!DB.runs.length){el.innerHTML=`<div class="empty"><p>No deploys yet. Queue one from a binding.</p></div>`;return}
   el.innerHTML=`<table><thead><tr><th>Status</th><th>When</th><th>Site</th><th>Commit</th><th></th></tr></thead><tbody>`+
     DB.runs.map(r=>{const d=DB.deps.find(x=>x.id===r.deploymentId);const pid=r.productId||(d&&d.productId);const tid=r.targetId||(d&&(d.targetId||d.vdsId));const dom=r.domain||(d&&d.domain);const p=DB.products.find(x=>x.id===pid);const t=DB.targets.find(x=>x.id===tid);
-      const pname=p?p.name:'';const showBranch=r.branch&&r.branch!==pname?` · <span class="mono dim">${r.branch}</span>`:'';
+      const pname=p?p.name:'';
       const site=dom?`<a href="https://${dom}" target="_blank" rel="noopener">${dom}</a>`:(t?t.name:'?');
-      const under=pname?`<br><span class="dim">${pname}${showBranch}</span>`:'';
+      const meta=[pname,(r.branch&&r.branch!==pname)?r.branch:''].filter(Boolean).join(' · ');
       return `<tr><td><span class="beacon ${beacon(r.status)}"></span><span class="mono">${r.status}${r.reason?' · '+r.reason:''}</span></td>
-      <td class="mono">${(r.startedAt||'').slice(0,16).replace('T',' ')}<br><span class="dim">${r.trigger||''}</span></td>
-      <td>${site}${under}</td>
+      <td class="mono">${timeAgo(r.startedAt)}<span class="dim"> · ${r.trigger||'manual'}</span></td>
+      <td>${site}${meta?`<span class="dim"> · ${meta}</span>`:''}</td>
       <td class="mono dim">${r.commitSha?r.commitSha.slice(0,8):'—'}</td>
-      <td>${d?`<button class="btn ghost small" data-open="${d.id}">Open</button>`:''}${r.status==='failed'?` <button class="btn small" data-retry="${r.id}">Retry</button>`:''}</td></tr>`}).join('')+`</tbody></table>`;
+      <td>${dom?`<button class="btn ghost small" data-view="${dom}">View</button> `:''}${d?`<button class="btn ghost small" data-open="${d.id}">Log</button>`:''}${r.status==='failed'?` <button class="btn small" data-retry="${r.id}">Retry</button>`:''}</td></tr>`}).join('')+`</tbody></table>`;
   el.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.open));
+  el.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>window.open('https://'+b.dataset.view,'_blank','noopener'));
 }
 function renderBindings(){
   const el=$('#bindTable'); if(!el) return;

@@ -90,3 +90,17 @@ test('consistent buttons, copy and single retry path', () => {
   expect(html).not.toMatch('Any branch is a reskin');
   expect((html.match(/data-retry/g) || []).length).toBeGreaterThan(0);
 });
+test('deployments rows show humanized relative time', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('timeAgo');
+  expect(html).toMatch('ago');
+});
+test('deployments rows have a button to open the live site', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).toMatch('data-view');
+  expect(html).toMatch('window.open');
+});
+test('deployments rows are single-line (no raw timestamp split)', () => {
+  const html = fs.readFileSync('fleet/public/index.html', 'utf8');
+  expect(html).not.toMatch(/slice\(0,16\)/);
+});
