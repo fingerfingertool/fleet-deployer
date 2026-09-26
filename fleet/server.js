@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const { createStore, createPgStore } = require('./store');
 const { createWorker } = require('./worker');
+const { validateHeadScripts } = require('./inject');
 const ALLOWED_KINDS = ['vds', 'static-sftp'];
 function basicAuth(req, res, next) {
   const user = process.env.FLEET_USER, pass = process.env.FLEET_PASS;
@@ -84,6 +85,11 @@ function buildApp(file) {
       if (typeof req.body.webhookSecretRef !== 'string' || req.body.webhookSecretRef.length > 128 || !/^[A-Z0-9_]+$/.test(req.body.webhookSecretRef)) return res.status(400).json({ error: 'invalid webhookSecretRef' });
       product.webhookSecretRef = req.body.webhookSecretRef;
     }
+    if (req.body.headScripts !== undefined) {
+      const hsErr = validateHeadScripts(req.body.headScripts);
+      if (hsErr) return res.status(400).json({ error: hsErr });
+      product.headScripts = req.body.headScripts;
+    }
     res.status(201).json(await store.saveProduct(product));
   }));
   app.get('/api/fleet/products/:id/refs', ah(async (req, res) => {
@@ -151,6 +157,11 @@ function buildApp(file) {
     if (webhookSecretRef !== undefined) {
       if (typeof webhookSecretRef !== 'string' || webhookSecretRef.length > 128 || !/^[A-Z0-9_]+$/.test(webhookSecretRef)) return res.status(400).json({ error: 'invalid webhookSecretRef' });
       p.webhookSecretRef = webhookSecretRef;
+    }
+    if (req.body.headScripts !== undefined) {
+      const hsErr = validateHeadScripts(req.body.headScripts);
+      if (hsErr) return res.status(400).json({ error: hsErr });
+      p.headScripts = req.body.headScripts;
     }
     const { privateKey, sshKey, password, keyMaterial, ...rest } = p;
     res.json(await store.saveProduct(rest));

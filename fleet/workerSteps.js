@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { planPublish, redactSecrets } = require('./publish');
+const { injectHeadScripts } = require('./inject');
 
 function sh(cmd, args, opts) {
   return new Promise((resolve, reject) => {
@@ -80,6 +81,12 @@ async function runSteps({ store, deployment, run }, log = () => {}) {
       if (plan.mode !== 'script') {
         const preDir = path.join(dir, plan.sourceDir || 'public');
         if (!fs.existsSync(preDir)) throw coded('build-failed', `source dir missing in branch: ${plan.sourceDir || 'public'} (branch layout changed?)`);
+        // Inject product head scripts (write file + <script> before </head>)
+        const scripts = Array.isArray(product.headScripts) ? product.headScripts : [];
+        if (scripts.length) {
+          const res = injectHeadScripts(preDir, scripts);
+          say(`injected head scripts: ${res.written.join(', ')} into ${res.injected} html file(s)`);
+        }
       }
       await client.access({
         host: target.host,
