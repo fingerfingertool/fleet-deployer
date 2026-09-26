@@ -72,3 +72,18 @@ test('injectHeadScripts injects multiple scripts in order', () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+test('injectHeadScripts decodes base64 (file-upload) content to bytes', () => {
+  const root = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fleet-inject-'));
+  try {
+    fs.writeFileSync(path.join(root, 'index.html'), '<html><head></head></html>');
+    const raw = '\xff\xfeconsole.log(1)'; // non-utf8 bytes to prove binary-safe
+    const scripts = [{ file: 'bin.js', content: Buffer.from(raw, 'binary').toString('base64'), encoding: 'base64' }];
+    injectHeadScripts(root, scripts);
+    const written = fs.readFileSync(path.join(root, 'bin.js'));
+    expect(written.equals(Buffer.from(raw, 'binary'))).toBe(true);
+    const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+    expect(html).toContain('<script src="/bin.js"></script>');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

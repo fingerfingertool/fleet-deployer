@@ -1,9 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-// Validate a product's headScripts array: [{ file, content }]
+// Validate a product's headScripts array: [{ file, content, encoding }]
 // `file` must be a simple filename (no directory separators, no traversal),
-// ≤ 256 chars, and `content` must be a string.
+// ≤ 256 chars. `content` is the script text (utf8) OR base64 when
+// `encoding === 'base64'` (file-upload path).
 function validateHeadScripts(scripts) {
   if (scripts === undefined || scripts === null) return null;
   if (!Array.isArray(scripts)) return 'headScripts must be an array';
@@ -12,6 +13,7 @@ function validateHeadScripts(scripts) {
     if (typeof s.file !== 'string' || s.file.length === 0 || s.file.length > 256) return 'invalid headScript.file';
     if (s.file.includes('/') || s.file.includes('\\') || s.file === '..' || s.file === '.') return 'headScript.file must be a plain filename';
     if (typeof s.content !== 'string') return 'invalid headScript.content';
+    if (s.encoding !== undefined && s.encoding !== 'base64' && s.encoding !== 'utf8') return 'invalid headScript.encoding';
   }
   return null;
 }
@@ -31,6 +33,12 @@ function findHtmlFiles(root) {
   return out;
 }
 
+// Decode a headScript's content to bytes (handles base64-encoded uploads).
+function scriptBytes(s) {
+  if (s.encoding === 'base64') return Buffer.from(s.content, 'base64');
+  return Buffer.from(s.content, 'utf8');
+}
+
 // Write each script's content to <root>/<file>, and inject a
 // <script src="/<file>"></script> tag immediately before </head> (case-insensitive)
 // in every .html file under root. Returns { written, injected }.
@@ -42,7 +50,7 @@ function injectHeadScripts(root, scripts) {
   // Write script files at the site root.
   for (const s of scripts) {
     const dest = path.join(root, s.file);
-    fs.writeFileSync(dest, s.content);
+    fs.writeFileSync(dest, scriptBytes(s));
     written.push(s.file);
   }
 

@@ -16,11 +16,11 @@ test('targets table has delete buttons and clickable site links', () => {
   expect(html).toMatch('data-del-target');
   expect(html).toMatch('target="_blank"');
 });
-test('product editor has injected-js (head scripts) section', () => {
+test('product editor has injected-js (head scripts) upload', () => {
   const html = fs.readFileSync('fleet/public/index.html', 'utf8');
   expect(html).toMatch('headScripts');
-  expect(html).toMatch('hs-file');
-  expect(html).toMatch('hsAdd');
+  expect(html).toMatch('hsFile');
+  expect(html).toMatch('/scripts');
 });
 test('deploy buttons, history and retry wiring present', () => {
   const html = fs.readFileSync('fleet/public/index.html', 'utf8');

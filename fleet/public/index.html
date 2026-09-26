@@ -260,19 +260,31 @@ async function editProduct(id){
   const p=DB.products.find(x=>x.id===id);if(!p)return;
   const scripts=(p.headScripts||[]).map(s=>({...s}));
   const row=document.querySelector(`[data-edit-product="${id}"]`).closest('tr');
-  const scriptRow=(s)=>`<div class="hs-row" style="display:flex;gap:6px;margin:4px 0"><input class="hs-file" value="${s.file||''}" placeholder="file.js" size="16" style="flex:0 0 160px"><textarea class="hs-content" placeholder="/* js content */" rows="2" style="flex:1;font-family:var(--mono);font-size:12px">${s.content||''}</textarea><button class="btn ghost small hs-del">×</button></div>`;
+  const scriptRow=(s)=>`<div class="hs-row" style="display:flex;gap:6px;margin:4px 0;align-items:center"><span class="hs-name mono" style="flex:0 0 180px">${s.file||''}</span><button class="btn ghost small hs-del" style="flex:0 0 auto">Remove</button></div>`;
   row.innerHTML=`<td colspan="4"><div style="display:grid;gap:10px;max-width:640px">
     <div style="display:flex;gap:8px;align-items:center"><input id="eName" value="${p.name}" size="16"><select id="eBranch"><option>loading branches…</option></select><input id="eHook" placeholder="webhookSecretRef (ENV NAME)" value="${p.webhookSecretRef||''}" size="26"></div>
     <div class="mono dim" style="font-size:12px">${p.gitUrl||''}</div>
     <div><div class="dim" style="font-size:12px;margin-bottom:4px">Injected JS — written to site root and linked before &lt;/head&gt; on every deploy</div>
       <div id="hsList">${scripts.map(scriptRow).join('')}</div>
-      <button class="btn ghost small" id="hsAdd">+ Add JS file</button>
+      <label class="btn ghost small" style="cursor:pointer">+ Upload JS file <input id="hsFile" type="file" accept=".js" style="display:none"></label>
     </div>
     <div><button class="btn small" id="eSave">Save</button> <button class="btn ghost small" id="eCancel">Cancel</button></div>
   </div></td>`;
-  const collect=()=>[...document.querySelectorAll('#hsList .hs-row')].map(r=>({file:r.querySelector('.hs-file').value.trim(),content:r.querySelector('.hs-content').value})).filter(s=>s.file);
-  $('#hsAdd').onclick=()=>{$('#hsList').insertAdjacentHTML('beforeend',scriptRow({file:'',content:''}));};
-  document.querySelectorAll('#hsList .hs-del').forEach(b=>b.onclick=()=>b.closest('.hs-row').remove());
+  const relist=()=>{ const cur=(p.headScripts||[]).slice(); $('#hsList').innerHTML=cur.map(scriptRow).join('');
+    document.querySelectorAll('#hsList .hs-del').forEach(b=>b.onclick=async()=>{
+      const name=b.closest('.hs-row').querySelector('.hs-name').textContent;
+      const r=await fetch('/api/fleet/products/'+id+'/scripts?name='+encodeURIComponent(name),{method:'DELETE'});
+      if(r.ok){ const idx=p.headScripts.findIndex(s=>s.file===name); if(idx>=0){p.headScripts.splice(idx,1);} relist(); toast('Removed '+name);}
+      else toast('Could not remove.');
+    });
+  };
+  $('#hsFile').onchange=async()=>{
+    const f=$('#hsFile').files[0]; if(!f)return;
+    const r=await fetch('/api/fleet/products/'+id+'/scripts?name='+encodeURIComponent(f.name),{method:'POST',headers:{'Content-Type':'application/octet-stream'},body:f});
+    if(r.ok){ const saved=await r.json(); p.headScripts=saved.headScripts||[]; $('#hsFile').value=''; relist(); toast('Uploaded '+f.name); }
+    else toast('Could not upload: '+((await r.json()).error||'unknown'));
+  };
+  relist();
   try{
     const br=await api.get('/api/fleet/products/'+id+'/branches');
     if(br.error) throw new Error(br.error);
@@ -280,7 +292,7 @@ async function editProduct(id){
   }catch(e){ $('#eBranch').innerHTML=`<option value="${p.defaultBranch||'main'}">${p.defaultBranch||'main'} (list failed: ${(e&&e.message)||'unknown'})</option>`; }
   $('#eCancel').onclick=renderProducts;
   $('#eSave').onclick=async()=>{
-    const resp=await fetch('/api/fleet/products/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('#eName').value.trim(),defaultBranch:$('#eBranch').value,webhookSecretRef:$('#eHook').value.trim()||undefined,headScripts:collect()})});
+    const resp=await fetch('/api/fleet/products/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('#eName').value.trim(),defaultBranch:$('#eBranch').value,webhookSecretRef:$('#eHook').value.trim()||undefined})});
     resp.ok?(toast('Product updated.'),refresh()):toast('Could not update: '+((await resp.json()).error||'unknown'));
   };
 }

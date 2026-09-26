@@ -30,6 +30,34 @@ function buildApp(file) {
   app.use('/api/fleet/webhooks/github', express.raw({ type: 'application/json' }));
   app.use(express.json());
   app.get('/api/fleet/health', (req, res) => res.json({ ok: true }));
+  // Upload a JS file for a product: raw binary body, filename from query.
+  app.use('/api/fleet/products/:id/scripts', express.raw({ type: () => true, limit: '2mb' }));
+  app.post('/api/fleet/products/:id/scripts', basicAuth, ah(async (req, res) => {
+    const p = await store.getProduct(req.params.id);
+    if (!p) return res.status(404).json({ error: 'unknown product' });
+    let name = (req.query.name || '').toString().trim();
+    if (!name) return res.status(400).json({ error: 'script filename required (?name=file.js)' });
+    name = name.split(/[\\/]/).pop();
+    if (!name || name === '..' || name === '.' || name.length > 256) return res.status(400).json({ error: 'invalid script filename' });
+    const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
+    if (buf.length === 0) return res.status(400).json({ error: 'empty file' });
+    const scripts = Array.isArray(p.headScripts) ? p.headScripts.slice() : [];
+    const existing = scripts.findIndex((s) => s.file === name);
+    const entry = { file: name, content: buf.toString('base64'), encoding: 'base64' };
+    if (existing >= 0) scripts[existing] = entry; else scripts.push(entry);
+    p.headScripts = scripts;
+    const { privateKey, sshKey, password, keyMaterial, ...rest } = p;
+    res.json(await store.saveProduct(rest));
+  }));
+  app.delete('/api/fleet/products/:id/scripts', basicAuth, ah(async (req, res) => {
+    const p = await store.getProduct(req.params.id);
+    if (!p) return res.status(404).json({ error: 'unknown product' });
+    const name = (req.query.name || '').toString().trim();
+    if (!name) return res.status(400).json({ error: 'script filename required (?name=file.js)' });
+    p.headScripts = (Array.isArray(p.headScripts) ? p.headScripts : []).filter((s) => s.file !== name);
+    const { privateKey, sshKey, password, keyMaterial, ...rest } = p;
+    res.json(await store.saveProduct(rest));
+  }));
   app.post('/api/fleet/webhooks/github', ah(async (req, res) => {
     const event = req.headers['x-github-event'];
     if (event === 'ping') return res.json({ ok: true });
