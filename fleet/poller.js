@@ -3,12 +3,19 @@ const { redactSecrets } = require('./publish');
 
 // Resolve the remote tip SHA for a product's branch using the repo's deploy
 // key (tokenless, works for private repos) via `git ls-remote`.
+// Accepts either (product, branch) or ({ gitUrl, branch, product }).
 async function lsRemoteTip(product, branch) {
+  // object form: { gitUrl, branch, product } (used by pollGitHub's resolver)
+  if (product && typeof product === 'object' && product.product && typeof product.product.gitUrl === 'string') {
+    return lsRemoteTip(product.product, product.branch);
+  }
+  const p = product;
+  const b = branch;
   return new Promise((resolve, reject) => {
-    const args = ['ls-remote', product.gitUrl, `refs/heads/${branch}`];
+    const args = ['ls-remote', p.gitUrl, `refs/heads/${b}`];
     const env = { ...process.env };
-    if (product.repoKeyPath) {
-      env.GIT_SSH_COMMAND = `ssh -i ${product.repoKeyPath} -o StrictHostKeyChecking=no -o BatchMode=yes`;
+    if (p.repoKeyPath) {
+      env.GIT_SSH_COMMAND = `ssh -i ${p.repoKeyPath} -o StrictHostKeyChecking=no -o BatchMode=yes`;
     }
     execFile('git', args, { env, timeout: 30000 }, (err, stdout) => {
       if (err) return reject(err);
@@ -23,7 +30,7 @@ async function lsRemoteTip(product, branch) {
 // Skips running/queued deployments and deployments whose product is missing.
 // Returns { checked, queued } for observability.
 async function pollGitHub({ store, queue, resolver }) {
-  const resolve = resolver || lsRemoteTip;
+  const resolve = resolver || (({ product, branch }) => lsRemoteTip(product, branch));
   let checked = 0;
   let queued = 0;
   const deployments = await store.listDeployments();

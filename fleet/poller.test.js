@@ -78,3 +78,25 @@ test('poller reports checked/queued counts and skips missing products', async ()
   expect(res.checked).toBe(0);
   expect(res.queued).toBe(0);
 });
+
+test('default resolver wires pollGitHub object form to lsRemoteTip positional form', async () => {
+  // Regression: pollGitHub calls resolve({gitUrl, branch, product}); the default
+  // must translate that to lsRemoteTip(product, branch), not pass the object as `product`.
+  // Use a real local bare repo (no network) so we observe the exact `git ls-remote` args.
+  const fs = require('fs');
+  const { execSync } = require('child_process');
+  const { lsRemoteTip } = require('./poller');
+  const dir = fs.mkdtempSync(require('path').join(require('os').tmpdir(), 'fleet-poll-repo-'));
+  try {
+    execSync('git init -q --bare repo.git', { cwd: dir });
+    // seed one commit so the branch exists
+    fs.mkdirSync(dir + '/work');
+    execSync('git init -q . && git config user.email t@t && git config user.name t && echo hi > f && git add -A && git commit -qm x', { cwd: dir + '/work' });
+    execSync(`git remote add origin ${dir}/repo.git && git push -q origin master:main`, { cwd: dir + '/work' });
+    const gitUrl = dir + '/repo.git';
+    const tip = await lsRemoteTip({ gitUrl, branch: 'main', product: { gitUrl, repoKeyPath: null } });
+    expect(tip).toMatch(/^[0-9a-f]{40}$/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
